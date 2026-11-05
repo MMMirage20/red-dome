@@ -90,6 +90,8 @@ class SideRecord:
     min_dome_hp: float = 0.0
     #: Сколько своих роверов было, когда противник отправил первую волну.
     rovers_at_enemy_first_wave: int | None = None
+    #: Первый выстрел юнита этой стороны: когда её армия впервые дошла до противника.
+    first_shot_sec: float | None = None
 
 
 @dataclass
@@ -131,6 +133,8 @@ def play_report_game(balance: Balance, seed: int, sols: int, player: str = "bot"
                 record.first_rover_sec = now
             elif event.kind == "deposit_depleted":
                 record.depleted_sec.append(now)
+            elif event.kind == "shot" and record.first_shot_sec is None:
+                record.first_shot_sec = now
         for side, record in records.items():
             record.min_dome_hp = min(record.min_dome_hp, _dome_hp(sim, side))
             sent = bots[side].waves
@@ -171,6 +175,7 @@ def summary_rows(games: list[GameRecord], side: Side) -> list[tuple[str, str]]:
         ("Побед", f"{wins} из {len(games)}"),
         ("Время до поражения", describe(losses)),
     ]
+    rows.append(("Своя армия впервые стреляет", describe([r.first_shot_sec for r in recs if r.first_shot_sec is not None])))
     for n in range(WAVES_IN_SUMMARY):
         waves = [r.waves[n] for r in recs if len(r.waves) > n]
         rows.append((f"Своя волна {n + 1}: отправлена", describe([t for t, _ in waves])))
@@ -196,18 +201,20 @@ def game_row(game: GameRecord) -> list[str]:
         result = f"{'победа' if game.winner == 'player' else 'поражение'} ({REASON_TITLES[game.reason or '']})"
     waves = ", ".join(f"{t:.0f} с × {size}" for t, size in vector.waves[:WAVES_IN_SUMMARY]) or "—"
     rovers = "—" if player.rovers_at_enemy_first_wave is None else str(player.rovers_at_enemy_first_wave)
+    contact = "—" if vector.first_shot_sec is None else f"{vector.first_shot_sec:.0f} с"
     return [
         str(game.seed),
         result,
         f"{game.end_sec:.0f} с",
         waves,
+        contact,
         f"{player.min_dome_hp:.0f} / {player.dome_max_hp:.0f}",
         str(player.metal_mined_at_checkpoint),
         rovers,
     ]
 
 
-GAME_HEADER = ["seed", "итог для игрока", "конец", "волны ВЕКТОРа (отправка × роверов)", "мин. HP купола игрока", "металл игрока к 180 с", "роверов игрока к 1-й волне"]
+GAME_HEADER = ["seed", "итог для игрока", "конец", "волны ВЕКТОРа (отправка × роверов)", "ВЕКТОР впервые стреляет", "мин. HP купола игрока", "металл игрока к 180 с", "роверов игрока к 1-й волне"]
 
 
 def _md_table(header: list[str], rows: list[list[str]]) -> list[str]:
@@ -223,7 +230,8 @@ def render_markdown(games: list[GameRecord], args: argparse.Namespace, balance: 
         f"Сложность: {balance.difficulty}. "
         f"Партий: {len(games)} (seed {seeds}), лимит {args.sols} солов ({args.sols * balance.sol_seconds:.0f} с). "
         f"ВЕКТОР — бот v0, {PLAYER_PROXY_TITLES[args.player]}; это замена новичку, а не живой игрок. "
-        "Время волн — момент отправки, а не прихода к базе. Значения: медиана (мин–макс), n — сколько раз случилось.",
+        "Время волн — момент отправки; «впервые стреляет» — когда армия дошла до противника. "
+        "Значения: медиана (мин–макс), n — сколько раз случилось.",
         "",
         "### Сводка",
         "",

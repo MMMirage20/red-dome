@@ -51,3 +51,5 @@ def test_economy_player_builds_no_army(balance: Balance) -> None:
     assert player.hangar_sec is None and player.first_rover_sec is None and not player.waves
     assert player.metal_mined_at_checkpoint > 0
     assert player.rovers_at_enemy_first_wave == 0
+    vector = game.sides["vector"]
+    assert vector.first_shot_sec is not None and vector.first_shot_sec >= vector.waves[0][0]
