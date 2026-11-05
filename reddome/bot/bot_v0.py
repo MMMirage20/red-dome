@@ -53,6 +53,8 @@ class BotV0:
         self.ticks = 0
         self.waves_sent = 0
         self.next_wave_ms: int | None = None
+        #: Отправленные волны: (время партии в мс, сколько роверов ушло) — для отчётов баланса.
+        self.waves: list[tuple[int, int]] = []
 
     def on_tick(self, sim: Simulation) -> None:
         self.ticks += 1
@@ -137,6 +139,7 @@ class BotV0:
         if target is None:
             return
         sim.attack_move(self.side, [u.id for u in ready], target)
+        self.waves.append((state.elapsed_ms, len(ready)))
         self.waves_sent += 1
         self.next_wave_ms += int(bot.wave_interval_sec * 1000)
 
