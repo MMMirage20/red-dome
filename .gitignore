@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Редакторы
+.vscode/
+
+# Сборка PyInstaller
+build/
+dist/
+*.spec
+
+# Датасеты генерируются командой python -m tools.sim_cli и в репозиторий не попадают
+ml/data/*.csv
+# Логи жестов (игра, tools.gesture_bench) и голоса — только на машине игрока
+ml/data/gesture_log_*.csv
+ml/data/gesture_bench_*.csv
+ml/data/voice_log_*.csv
+
+# Модели скачиваются командой python tools/download_models.py и в git не попадают
+models/
+*.task
+models/vosk/
+vosk-model-*/
+*.zip.part
+*.task.part
+
+.claude/
+*.log

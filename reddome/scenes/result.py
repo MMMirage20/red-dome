@@ -1,0 +1,75 @@
+"""Экран итогов (ФТ-12): результат, время, статистика партии крупными числами.
+
+TODO W3-10: очки по формуле из balance.score.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pygame
+
+from reddome.render.draw import glow
+from reddome.scenes.base import Scene
+from reddome.sim.types import Outcome, SideStats
+from reddome.ui import theme
+from reddome.ui.widgets import Button, card
+
+REASONS = {
+    "dome_destroyed": ("Купол ВЕКТОРа разрушен", "Ваш командный купол разрушен"),
+    "oxygen": ("У ВЕКТОРа закончился кислород", "Кислород закончился"),
+}
+
+
+class ResultScene(Scene):
+    opaque = True
+
+    def enter(self, outcome: Outcome, sol: int = 0, elapsed_ms: int = 0, stats: dict[str, SideStats] | None = None,
+              background: pygame.Surface | None = None, **data: Any) -> None:
+        self.background = background
+        self.won = outcome.winner == "player"
+        win_text, loss_text = REASONS[outcome.reason]
+        self.reason = win_text if self.won else loss_text
+        minutes, seconds = divmod(elapsed_ms // 1000, 60)
+        own = (stats or {}).get("player", SideStats())
+        self.tiles = [
+            ("Время", f"{minutes}:{seconds:02d}"),
+            ("Солов прожито", str(sol)),
+            ("Добыто металла", str(own.metal_mined)),
+            ("Собрано юнитов", str(own.units_trained)),
+            ("Уничтожено врагов", str(own.enemy_units_killed + own.enemy_buildings_destroyed)),
+            ("Потеряно юнитов", str(own.units_lost)),
+        ]
+        w, h = theme.SCREEN_SIZE
+        self.card_rect = pygame.Rect(0, 0, 720, 520)
+        self.card_rect.center = (w // 2, h // 2)
+        color = theme.SUCCESS if self.won else theme.ALARM
+        self.halo = glow(160, color)
+        self.halo.fill((110, 110, 110), special_flags=pygame.BLEND_MULT)
+        self.buttons = [
+            Button((w // 2 - 130, self.card_rect.bottom - 56), "Ещё раз", lambda: self.app.start("game"), width=220),
+            Button((w // 2 + 130, self.card_rect.bottom - 56), "В меню", lambda: self.app.start("menu"), width=220),
+        ]
+
+    def handle_event(self, event: pygame.event.Event) -> None:
+        for button in self.buttons:
+            button.handle_event(event)
+
+    def draw(self, surface: pygame.Surface) -> None:
+        if self.background is not None:
+            surface.blit(self.background, (0, 0))
+        r = self.card_rect
+        surface.blit(card(r.size), r)
+        title, color = ("Победа", theme.SUCCESS) if self.won else ("Поражение", theme.ALARM)
+        surface.blit(self.halo, self.halo.get_rect(center=(r.centerx, r.y + 70)), special_flags=pygame.BLEND_ADD)
+        theme.draw_text(surface, title, (r.centerx, r.y + 70), 64, color, anchor="center", kind="title", shadow=True)
+        theme.draw_text(surface, self.reason, (r.centerx, r.y + 128), 22, theme.TEXT, anchor="center")
+        for i, (label, value) in enumerate(self.tiles):
+            col, row = i % 3, i // 3
+            tile = pygame.Rect(r.x + 30 + col * 224, r.y + 170 + row * 124, 208, 108)
+            pygame.draw.rect(surface, theme.PANEL_LIGHT, tile, border_radius=10)
+            pygame.draw.rect(surface, theme.PANEL_EDGE, tile, 1, border_radius=10)
+            theme.draw_text(surface, value, (tile.centerx, tile.y + 44), 40, theme.SAND, anchor="center", kind="title")
+            theme.draw_text(surface, label, (tile.centerx, tile.bottom - 20), 15, theme.TEXT_QUIET, anchor="center")
+        for button in self.buttons:
+            button.draw(surface)

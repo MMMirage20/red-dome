@@ -1,0 +1,3 @@
+# Игра и тесты. Ставится первым: pip install -r requirements.txt
+pygame-ce>=2.5
+pytest>=8

@@ -1,0 +1,9 @@
+[project]
+name = "red-dome"
+version = "0.0.1"
+description = "«Красный купол» — RTS-колония на Марсе с ботом-соперником «ВЕКТОР»"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

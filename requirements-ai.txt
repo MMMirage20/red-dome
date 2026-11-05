@@ -1,0 +1,11 @@
+# Распознавание жестов и голоса, ML. Нужно с недели 3 (W3-12) и недели 4.
+# pip install -r requirements-ai.txt
+mediapipe>=1.1
+# mediapipe сам зависит от opencv-contrib-python; opencv-python рядом с ним конфликтует (оба ставят cv2)
+opencv-contrib-python>=4.10
+vosk>=0.3.45
+sounddevice>=0.5
+numpy>=2.0
+pandas>=2.2
+scikit-learn>=1.5
+joblib>=1.4

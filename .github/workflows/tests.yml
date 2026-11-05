@@ -1,0 +1,32 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    env:
+      # pygame без окна и звуковой карты
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      # Только базовые зависимости: игра обязана работать без requirements-ai.txt.
+      # Тесты, которым нужны mediapipe, cv2, vosk или файлы моделей, пропускаются (skip).
+      - name: Установить зависимости
+        run: python -m pip install -r requirements.txt
+
+      - name: pytest
+        run: python -m pytest -rs

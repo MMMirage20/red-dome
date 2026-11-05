@@ -1,0 +1,12 @@
+# Текстовые файлы хранятся в репозитории с переводом строки LF, на диске — как принято в системе.
+# Без этого файлы, сохранённые на Windows (CRLF) и на Linux/macOS (LF), дают «изменения» во всех строках.
+* text=auto
+
+# Двоичные файлы не трогаем
+*.png binary
+*.jpg binary
+*.ttf binary
+*.otf binary
+*.task binary
+*.zip binary
+*.exe binary
