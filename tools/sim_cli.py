@@ -23,7 +23,7 @@ from reddome.bot.bot_v0 import BotV0
 from reddome.config.balance import Balance, load_balance
 from reddome.sim.economy import supply_cap, supply_used
 from reddome.sim.simulation import Simulation
-from reddome.sim.types import BUILDING_TYPES, RESOURCE_KEYS, SIDES, UNIT_TYPES, Side, opponent_of
+from reddome.sim.types import BUILDING_TYPES, DIFFICULTIES, RESOURCE_KEYS, SIDES, UNIT_TYPES, Side, opponent_of
 
 #: Шаг прогона в отчёте: события получают время с точностью до секунды.
 REPORT_STEP_MS = 1000
@@ -38,6 +38,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--out", type=Path, default=Path("ml/data/games_v0.csv"), help="куда записать CSV")
     parser.add_argument("--report", action="store_true", help="напечатать отчёт баланса вместо CSV")
     parser.add_argument("--md", action="store_true", help="отчёт в Markdown (для docs/balance)")
+    parser.add_argument("--difficulty", choices=DIFFICULTIES, default=None,
+                        help="сложность ВЕКТОРа: easy, normal, hard (по умолчанию — из balance.json)")
     return parser.parse_args(argv)
 
 
@@ -190,8 +192,10 @@ def _md_table(header: list[str], rows: list[list[str]]) -> list[str]:
 def render_markdown(games: list[GameRecord], args: argparse.Namespace, balance: Balance) -> str:
     seeds = f"{games[0].seed}–{games[-1].seed}" if games else "—"
     lines = [
-        f"Команда: `python -m tools.sim_cli --games {args.games} --seed {args.seed} --sols {args.sols} --report --md`",
+        f"Команда: `python -m tools.sim_cli --games {args.games} --seed {args.seed} --sols {args.sols} "
+        f"--difficulty {balance.difficulty} --report --md`",
         "",
+        f"Сложность: {balance.difficulty}. "
         f"Партий: {len(games)} (seed {seeds}), лимит {args.sols} солов ({args.sols * balance.sol_seconds:.0f} с). "
         "За обе стороны играет бот «ВЕКТОР» v0 — это замена новичку, а не живой игрок. "
         "Время волн — момент отправки, а не прихода к базе. Значения: медиана (мин–макс), n — сколько раз случилось.",
@@ -207,8 +211,8 @@ def render_markdown(games: list[GameRecord], args: argparse.Namespace, balance: 
     return "\n".join(lines) + "\n"
 
 
-def render_text(games: list[GameRecord]) -> str:
-    lines = [f"Партий: {len(games)}"]
+def render_text(games: list[GameRecord], balance: Balance) -> str:
+    lines = [f"Сложность: {balance.difficulty}, партий: {len(games)}"]
     for side in SIDES:
         lines.append(f"-- {SIDE_TITLES[side]}")
         lines += [f"  {name}: {value}" for name, value in summary_rows(games, side)]
@@ -219,7 +223,7 @@ def render_text(games: list[GameRecord]) -> str:
 
 def run_report(balance: Balance, args: argparse.Namespace) -> None:
     games = [play_report_game(balance, args.seed + game_id, args.sols) for game_id in range(args.games)]
-    print(render_markdown(games, args, balance) if args.md else render_text(games), end="")
+    print(render_markdown(games, args, balance) if args.md else render_text(games, balance), end="")
 
 
 def run_csv(balance: Balance, args: argparse.Namespace) -> None:
@@ -280,7 +284,7 @@ def main(argv: list[str] | None = None) -> None:
     if isinstance(sys.stdout, io.TextIOWrapper):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     args = parse_args(argv)
-    balance = load_balance()
+    balance = load_balance(difficulty=args.difficulty)
     if args.report:
         run_report(balance, args)
     else:

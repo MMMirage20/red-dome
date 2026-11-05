@@ -14,6 +14,7 @@ from reddome.input.gestures import COMMAND_TITLES, GESTURE_BINDINGS, GESTURE_TIT
 from reddome.input.keyboard import KEYS
 from reddome.scenes.base import Scene
 from reddome.ui import theme
+from reddome.ui.commands import difficulty_line
 from reddome.ui.icons import GESTURE_ICONS, icon
 from reddome.ui.widgets import Button, card
 
@@ -49,8 +50,9 @@ def gesture_rows() -> list[tuple[str, str, str, str]]:
 class PauseScene(Scene):
     opaque = True
 
-    def enter(self, background: pygame.Surface | None = None, **data: Any) -> None:
+    def enter(self, background: pygame.Surface | None = None, difficulty: str | None = None, **data: Any) -> None:
         self.background = background
+        self.difficulty_text = difficulty_line(difficulty or self.app.difficulty)
         w, h = theme.SCREEN_SIZE
         self.card_rect = pygame.Rect(0, 0, 860, 470)
         self.card_rect.center = (w // 2, h // 2)
@@ -89,6 +91,7 @@ class PauseScene(Scene):
         r = self.card_rect
         surface.blit(card(r.size), r)
         theme.draw_text(surface, "Пауза", (r.x + 190, r.y + 70), 48, theme.SAND, anchor="center", kind="title", shadow=True)
+        theme.draw_text(surface, self.difficulty_text, (r.x + 190, r.y + 112), 16, theme.TEXT_QUIET, anchor="center")
         for button in self.buttons:
             button.draw(surface)
         x = r.x + 380

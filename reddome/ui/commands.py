@@ -25,6 +25,12 @@ BUILDING_NAMES: dict[str, str] = {
     "hangar": "Ангар",
 }
 UNIT_NAMES: dict[str, str] = {"drone": "Дрон", "guard_rover": "Охранный ровер"}
+DIFFICULTY_NAMES: dict[str, str] = {"easy": "Лёгкий", "normal": "Обычный", "hard": "Сложный"}
+
+
+def difficulty_line(difficulty: str) -> str:
+    """Строка для паузы и итогов: «Сложность: Обычный»."""
+    return f"Сложность: {DIFFICULTY_NAMES[difficulty]}"
 BUILD_KEYS: tuple[tuple[BuildingType, int, str], ...] = (
     ("solar", pygame.K_p, "P"),
     ("ice_drill", pygame.K_i, "I"),

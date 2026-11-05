@@ -33,5 +33,13 @@
     "wave_growth_every": 2
   },
   "gestures": { "min_score": 0.7, "hold_ms": 500, "attack_hold_ms": 800, "pause_hold_ms": 1000, "cooldown_ms": 600 },
-  "score": { "win": 1000, "killed_unit": 20, "population": 50, "green_sol": 5, "lost_colonist": -200 }
+  "score": { "win": 1000, "killed_unit": 20, "population": 50, "green_sol": 5, "lost_colonist": -200 },
+  "difficulty": {
+    "default": "normal",
+    "levels": {
+      "easy": { "bot_timing": 1.25, "bot_waves": 0.75, "bot_resources": 0.8, "player_dome_hp": 1.25 },
+      "normal": { "bot_timing": 1.0, "bot_waves": 1.0, "bot_resources": 1.0, "player_dome_hp": 1.0 },
+      "hard": { "bot_timing": 0.8, "bot_waves": 1.25, "bot_resources": 1.2, "player_dome_hp": 0.9 }
+    }
+  }
 }

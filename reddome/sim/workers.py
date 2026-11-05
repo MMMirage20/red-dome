@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 from reddome.sim.state import (
@@ -164,6 +165,8 @@ def deliver(state: GameState, balance: Balance, unit: Unit, building: Building, 
     amount = unit.carry
     if building.type == "regolith" and building.powered:
         amount = int(unit.carry * (1 + balance.workers.refinery_bonus))
+    # Доход стороны от сложности (у ВЕКТОРа на «Лёгком» меньше, на «Сложном» больше); у «Обычного» — 1.0.
+    amount = math.floor(amount * balance.side(unit.side).income_ratio + 0.5)
     state.colonies[unit.side].resources["metal"] += amount
     state.stats[unit.side].metal_mined += amount
     unit.carry = 0

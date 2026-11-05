@@ -21,6 +21,7 @@ from reddome.scenes.pause import PauseScene
 from reddome.scenes.result import ResultScene
 from reddome.scenes.shop import ShopScene
 from reddome.sim.state import create_initial_state
+from reddome.sim.types import Difficulty
 from reddome.ui import theme
 from reddome.ui.cursor import CursorManager
 from reddome.ui.gesture_hud import draw_overlay
@@ -60,6 +61,8 @@ class App:
         self.debug = debug
         self.seed = seed
         self.balance = balance or load_balance()
+        #: Сложность следующей партии: меняется в меню, «Ещё раз» на итогах играет на ней же.
+        self.difficulty: Difficulty = self.balance.difficulty
         self.graphics = graphics or GraphicsSettings(show_fps=debug)
         self.sprites = SpriteBank()
         self.cursor = CursorManager()

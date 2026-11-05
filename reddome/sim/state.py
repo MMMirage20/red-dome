@@ -173,6 +173,7 @@ def create_initial_state(balance: Balance, seed: int) -> GameState:
         seed=seed,
         map=game_map,
         colonies={side: create_colony(side, balance) for side in SIDES},
+        difficulty=balance.difficulty,
     )
     state.deposits = [
         Deposit(id=i + 1, tiles=list(tiles), amount=balance.deposit.ore_amount, initial=balance.deposit.ore_amount)

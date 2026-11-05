@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from reddome.sim.types import BUILDING_TYPES, UNIT_TYPES, BuildingType, Side
+from reddome.sim.types import BUILDING_TYPES, DIFFICULTIES, UNIT_TYPES, BuildingType, Difficulty, Side
 
 BALANCE_PATH = Path(__file__).with_name("balance.json")
 
@@ -153,6 +153,25 @@ class PlayerSpec:
 
 
 @dataclass(frozen=True)
+class DifficultySpec:
+    """Множители уровня сложности. У «Обычного» все 1.0 — это числа из остальных разделов balance.json."""
+
+    #: Время до первой волны ВЕКТОРа и интервал между волнами.
+    bot_timing: float
+    #: Размер волн ВЕКТОРа.
+    bot_waves: float
+    #: Стартовые ресурсы ВЕКТОРа и металл, который сдают его дроны.
+    bot_resources: float
+    #: Полное здоровье купола игрока.
+    player_dome_hp: float
+
+
+def _scaled(value: float, ratio: float) -> int:
+    """Целое после множителя, с округлением половины вверх (одинаково на любой платформе)."""
+    return math.floor(value * ratio + 0.5)
+
+
+@dataclass(frozen=True)
 class SideSpec:
     """Числа, которые у игрока и ВЕКТОРа разные. Считаются один раз при загрузке баланса."""
 
@@ -180,8 +199,14 @@ class Balance:
     gestures: GestureSpec
     score: ScoreSpec
     player: PlayerSpec
-    #: Итоговые числа каждой стороны. Читать через side() и max_hp(), а не собирать заново.
+    #: Итоговые числа каждой стороны с учётом сложности. Читать через side() и max_hp().
     sides: dict[Side, SideSpec]
+    #: Сложность, для которой посчитаны sides.
+    difficulty: Difficulty
+    #: Множители всех уровней — для выбора в меню и отчётов.
+    difficulties: dict[Difficulty, DifficultySpec]
+    #: Исходный balance.json: из него пересчитывается баланс другой сложности.
+    raw: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
     def side(self, side: Side) -> SideSpec:
         return self.sides[side]
@@ -192,9 +217,46 @@ class Balance:
             return self.sides[side].dome_hp
         return self.buildings[type].hp
 
+    def with_difficulty(self, difficulty: Difficulty) -> Balance:
+        """Тот же balance.json на другом уровне сложности."""
+        if difficulty == self.difficulty:
+            return self
+        return balance_from_dict(self.raw, difficulty)
 
-def balance_from_dict(raw: dict[str, Any]) -> Balance:
-    """Собирает Balance из словаря. Лишний или пропущенный ключ сразу даёт понятную ошибку."""
+
+def side_specs(start: StartSpec, vector_dome_hp: int, bot: BotSpec, player: PlayerSpec, level: DifficultySpec) -> dict[Side, SideSpec]:
+    """Единственное место, где множители сложности превращаются в числа партии.
+
+    Сложность меняет только ВЕКТОРа и купол игрока. Сторона игрока остаётся с базовыми числами бота:
+    в sim_cli за неё тоже играет бот, и сравнение уровней не должно его менять.
+    """
+    vector_start = replace(
+        start,
+        energy=_scaled(start.energy, level.bot_resources),
+        water=_scaled(start.water, level.bot_resources),
+        oxygen=_scaled(start.oxygen, level.bot_resources),
+        metal=_scaled(start.metal, level.bot_resources),
+    )
+    vector_bot = replace(
+        bot,
+        first_wave_sec=bot.first_wave_sec * level.bot_timing,
+        wave_interval_sec=bot.wave_interval_sec * level.bot_timing,
+        wave_size_ratio=level.bot_waves,
+    )
+    return {
+        "player": SideSpec(
+            start=replace(start, metal=player.start_metal),
+            dome_hp=_scaled(player.dome_hp, level.player_dome_hp),
+            income_ratio=1.0,
+            bot=bot,
+        ),
+        "vector": SideSpec(start=vector_start, dome_hp=vector_dome_hp, income_ratio=level.bot_resources, bot=vector_bot),
+    }
+
+
+def balance_from_dict(raw: dict[str, Any], difficulty: str | None = None) -> Balance:
+    """Собирает Balance из словаря на уровне сложности difficulty (по умолчанию — difficulty.default).
+    Лишний или пропущенный ключ и неизвестная сложность сразу дают понятную ошибку."""
     for section, names in (("buildings", BUILDING_TYPES), ("units", UNIT_TYPES)):
         if set(raw[section]) != set(names):
             raise ValueError(f"balance.json: в разделе {section} ожидаются ключи {sorted(names)}")
@@ -205,10 +267,14 @@ def balance_from_dict(raw: dict[str, Any]) -> Balance:
     if bot.wave_growth_every < 1:
         raise ValueError("balance.json: bot.wave_growth_every должен быть не меньше 1")
     player = PlayerSpec(**raw["player"])
-    sides = {
-        "player": SideSpec(start=replace(start, metal=player.start_metal), dome_hp=player.dome_hp, income_ratio=1.0, bot=bot),
-        "vector": SideSpec(start=start, dome_hp=buildings["dome"].hp, income_ratio=1.0, bot=bot),
-    }
+    levels = raw["difficulty"]["levels"]
+    if set(levels) != set(DIFFICULTIES):
+        raise ValueError(f"balance.json: в разделе difficulty.levels ожидаются ключи {list(DIFFICULTIES)}")
+    difficulties: dict[Difficulty, DifficultySpec] = {name: DifficultySpec(**levels[name]) for name in DIFFICULTIES}
+    level = difficulty or raw["difficulty"]["default"]
+    if level not in difficulties:
+        raise ValueError(f"Неизвестная сложность {level!r}: есть {', '.join(DIFFICULTIES)}")
+    sides = side_specs(start, buildings["dome"].hp, bot, player, difficulties[level])
     return Balance(
         sol_seconds=raw["sol_seconds"],
         start=start,
@@ -229,9 +295,12 @@ def balance_from_dict(raw: dict[str, Any]) -> Balance:
         score=ScoreSpec(**raw["score"]),
         player=player,
         sides=sides,
+        difficulty=level,
+        difficulties=difficulties,
+        raw=raw,
     )
 
 
-def load_balance(path: Path = BALANCE_PATH) -> Balance:
+def load_balance(path: Path = BALANCE_PATH, difficulty: str | None = None) -> Balance:
     with path.open(encoding="utf-8") as file:
-        return balance_from_dict(json.load(file))
+        return balance_from_dict(json.load(file), difficulty)
