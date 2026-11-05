@@ -198,7 +198,7 @@ def _step_gathering(state: GameState, balance: Balance, unit: Unit, dt_ms: int, 
 
 
 def _step_repair(state: GameState, balance: Balance, unit: Unit, building: Building, dt_ms: int) -> None:
-    max_hp = balance.buildings[building.type].hp
+    max_hp = balance.max_hp(building.side, building.type)
     hp_per_metal = 100 / balance.workers.repair_metal_per_100_hp
     gain = min(balance.workers.repair_hp_per_sec * dt_ms / 1000, max_hp - building.hp)
     building.hp += gain

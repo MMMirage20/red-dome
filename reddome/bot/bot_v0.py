@@ -4,7 +4,10 @@
 - держит дронов на добыче и докупает их до bot.target_drones;
 - строит по BUILD_ORDER на ближайшей к базе подходящей клетке;
 - после ангара собирает роверов и следит за лимитом армии и энергией;
-- отправляет волны атак по таймингам из balance.bot.
+- отправляет волны атак по таймингам из balance.bot: в волну уходит ровно BotSpec.wave_size(n)
+  самых здоровых свободных роверов, остальные остаются у базы охраной.
+
+Числа бота берутся из balance.side(сторона).bot: там уже учтена сложность партии.
 """
 
 from __future__ import annotations
@@ -32,8 +35,8 @@ class BuildStep:
     type: str
 
 
-#: Порядок стройки. Отличается от исходного ТЗ: лимит армии купола — 4 (3 стартовых дрона + 1),
-#: поэтому генератор кислорода нужен до второго дрона, а без солнечной панели быстро кончается энергия.
+#: Порядок стройки. Отличается от исходного ТЗ: лимит армии купола мал (3 стартовых дрона + 2),
+#: поэтому генератор кислорода нужен рано, а без солнечной панели быстро кончается энергия.
 BUILD_ORDER: tuple[BuildStep, ...] = (
     BuildStep("unit", "drone"),
     BuildStep("building", "oxy_gen"),
@@ -58,7 +61,7 @@ class BotV0:
 
     def on_tick(self, sim: Simulation) -> None:
         self.ticks += 1
-        if self.ticks % max(1, sim.balance.bot.think_interval_ms // TICK_MS) == 0:
+        if self.ticks % max(1, sim.balance.side(self.side).bot.think_interval_ms // TICK_MS) == 0:
             self.think(sim)
 
     # --- Решения ------------------------------------------------------------------
@@ -121,25 +124,27 @@ class BotV0:
             if self._try_build(sim, "ice_drill" if generators >= drills else "oxy_gen"):
                 return
         drones = len(self._own_units(sim, "drone")) + self._queued(sim, "drone")
-        if drones < balance.bot.target_drones:
+        if drones < balance.side(self.side).bot.target_drones:
             sim.train(self.side, "drone")
         if self._queued(sim, "guard_rover") < 2:
             sim.train(self.side, "guard_rover")
 
     def _send_waves(self, sim: Simulation) -> None:
-        state, bot = sim.state, sim.balance.bot
+        state, bot = sim.state, sim.balance.side(self.side).bot
         if self.next_wave_ms is None:
             self.next_wave_ms = int(bot.first_wave_sec * 1000)
         if state.elapsed_ms < self.next_wave_ms:
             return
+        size = bot.wave_size(self.waves_sent)
         ready = [u for u in self._own_units(sim, "guard_rover") if u.task == "idle"]
-        if len(ready) < bot.wave_size_start + self.waves_sent * bot.wave_growth:
+        if len(ready) < size:
             return
         target = self.wave_target(sim)
         if target is None:
             return
-        sim.attack_move(self.side, [u.id for u in ready], target)
-        self.waves.append((state.elapsed_ms, len(ready)))
+        wave = sorted(ready, key=lambda u: (-u.hp, u.id))[:size]
+        sim.attack_move(self.side, [u.id for u in wave], target)
+        self.waves.append((state.elapsed_ms, len(wave)))
         self.waves_sent += 1
         self.next_wave_ms += int(bot.wave_interval_sec * 1000)
 

@@ -39,7 +39,8 @@ def test_building_costs_metal(balance: Balance) -> None:
     result = sim.build("player", "solar", spot.x, spot.y)
 
     assert result.ok
-    assert sim.state.colonies["player"].resources["metal"] == balance.start.metal - balance.buildings["solar"].cost
+    start_metal = balance.side("player").start.metal
+    assert sim.state.colonies["player"].resources["metal"] == start_metal - balance.buildings["solar"].cost
     site = next(b for b in sim.state.buildings if b.type == "solar" and b.side == "player")
     assert not site.complete
 
@@ -64,7 +65,10 @@ def test_oxygen_sets_army_limit(balance: Balance) -> None:
     assert spot is not None
     add_building(sim.state, balance, "player", "hangar", spot)
 
-    assert supply_cap(sim.state, balance, "player") == 4
-    assert supply_used(sim.state, balance, "player") == 3
-    assert sim.train("player", "guard_rover").ok
+    cap = balance.buildings["dome"].supply
+    used = balance.side("player").start.drones
+    assert supply_cap(sim.state, balance, "player") == cap
+    assert supply_used(sim.state, balance, "player") == used
+    for _ in range(cap - used):
+        assert sim.train("player", "guard_rover").ok
     assert sim.train("player", "guard_rover") == CommandResult.failure("Нужен генератор кислорода")

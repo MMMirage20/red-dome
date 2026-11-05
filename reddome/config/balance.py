@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+import math
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from reddome.sim.types import BUILDING_TYPES, UNIT_TYPES
+from reddome.sim.types import BUILDING_TYPES, UNIT_TYPES, BuildingType, Side
 
 BALANCE_PATH = Path(__file__).with_name("balance.json")
 
@@ -105,8 +106,19 @@ class BotSpec:
     target_drones: int
     first_wave_sec: float
     wave_interval_sec: float
+    #: Размер первой волны.
     wave_size_start: int
+    #: На сколько роверов растёт волна...
     wave_growth: int
+    #: ...и раз в сколько волн: при 1 и 2 волны идут 2, 2, 3, 3, 4, 4…
+    wave_growth_every: int
+    #: Множитель размера волн от сложности. В balance.json его нет: считается при загрузке.
+    wave_size_ratio: float = 1.0
+
+    def wave_size(self, n: int) -> int:
+        """Сколько роверов уходит в волну номер n (считая с нуля), не меньше одного."""
+        base = self.wave_size_start + (n // self.wave_growth_every) * self.wave_growth
+        return max(1, math.floor(base * self.wave_size_ratio + 0.5))
 
 
 @dataclass(frozen=True)
@@ -133,6 +145,26 @@ class ScoreSpec:
 
 
 @dataclass(frozen=True)
+class PlayerSpec:
+    """Фора стороны игрока поверх общих правил (этап 2: миссия 1 для новичка)."""
+
+    start_metal: int
+    dome_hp: int
+
+
+@dataclass(frozen=True)
+class SideSpec:
+    """Числа, которые у игрока и ВЕКТОРа разные. Считаются один раз при загрузке баланса."""
+
+    start: StartSpec
+    dome_hp: int
+    #: Множитель металла, который дроны этой стороны сдают на базу.
+    income_ratio: float
+    #: Настройки бота, если за эту сторону играет бот.
+    bot: BotSpec
+
+
+@dataclass(frozen=True)
 class Balance:
     sol_seconds: float
     start: StartSpec
@@ -147,6 +179,18 @@ class Balance:
     bot: BotSpec
     gestures: GestureSpec
     score: ScoreSpec
+    player: PlayerSpec
+    #: Итоговые числа каждой стороны. Читать через side() и max_hp(), а не собирать заново.
+    sides: dict[Side, SideSpec]
+
+    def side(self, side: Side) -> SideSpec:
+        return self.sides[side]
+
+    def max_hp(self, side: Side, type: BuildingType) -> int:
+        """Полное здоровье здания: у купола своё для каждой стороны, у остальных зданий — общее."""
+        if type == "dome":
+            return self.sides[side].dome_hp
+        return self.buildings[type].hp
 
 
 def balance_from_dict(raw: dict[str, Any]) -> Balance:
@@ -155,10 +199,20 @@ def balance_from_dict(raw: dict[str, Any]) -> Balance:
         if set(raw[section]) != set(names):
             raise ValueError(f"balance.json: в разделе {section} ожидаются ключи {sorted(names)}")
     consumption = raw["consumption"]
+    start = StartSpec(**raw["start"])
+    buildings = {name: BuildingSpec(**spec) for name, spec in raw["buildings"].items()}
+    bot = BotSpec(**raw["bot"])
+    if bot.wave_growth_every < 1:
+        raise ValueError("balance.json: bot.wave_growth_every должен быть не меньше 1")
+    player = PlayerSpec(**raw["player"])
+    sides = {
+        "player": SideSpec(start=replace(start, metal=player.start_metal), dome_hp=player.dome_hp, income_ratio=1.0, bot=bot),
+        "vector": SideSpec(start=start, dome_hp=buildings["dome"].hp, income_ratio=1.0, bot=bot),
+    }
     return Balance(
         sol_seconds=raw["sol_seconds"],
-        start=StartSpec(**raw["start"]),
-        buildings={name: BuildingSpec(**spec) for name, spec in raw["buildings"].items()},
+        start=start,
+        buildings=buildings,
         consumption=ConsumptionSpec(
             colonist_oxygen=consumption["colonist"]["oxygen"],
             colonist_water=consumption["colonist"]["water"],
@@ -170,9 +224,11 @@ def balance_from_dict(raw: dict[str, Any]) -> Balance:
         construction=ConstructionSpec(**raw["construction"]),
         production=ProductionSpec(**raw["production"]),
         combat=CombatSpec(**raw["combat"]),
-        bot=BotSpec(**raw["bot"]),
+        bot=bot,
         gestures=GestureSpec(**raw["gestures"]),
         score=ScoreSpec(**raw["score"]),
+        player=player,
+        sides=sides,
     )
 
 

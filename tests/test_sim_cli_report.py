@@ -3,21 +3,27 @@
 from __future__ import annotations
 
 import argparse
+import math
 
 from reddome.config.balance import Balance
 from tools.sim_cli import play_report_game, render_markdown
 
-#: Восемь солов (240 с) — первая волна при текущем балансе уже отправлена.
-SHORT_SOLS = 8
+#: Запас после первой волны: бот ждёт, пока соберёт нужное число роверов.
+AFTER_FIRST_WAVE_SEC = 90
+
+
+def short_sols(balance: Balance) -> int:
+    """Солов ровно столько, чтобы ВЕКТОР успел отправить первую волну."""
+    return math.ceil((balance.bot.first_wave_sec + AFTER_FIRST_WAVE_SEC) / balance.sol_seconds)
 
 
 def test_report_records_first_wave_and_checkpoint(balance: Balance) -> None:
-    game = play_report_game(balance, seed=1, sols=SHORT_SOLS)
+    game = play_report_game(balance, seed=1, sols=short_sols(balance))
     vector = game.sides["vector"]
-    assert vector.waves, "к 240 с ВЕКТОР должен отправить первую волну"
+    assert vector.waves, "ВЕКТОР должен успеть отправить первую волну"
     first_sec, first_size = vector.waves[0]
     assert first_sec >= balance.bot.first_wave_sec
-    assert first_size >= balance.bot.wave_size_start
+    assert first_size == balance.bot.wave_size(0)
     player = game.sides["player"]
     assert player.rovers_at_enemy_first_wave is not None
     assert player.metal_mined_at_checkpoint > 0
@@ -25,12 +31,14 @@ def test_report_records_first_wave_and_checkpoint(balance: Balance) -> None:
 
 
 def test_report_is_deterministic(balance: Balance) -> None:
-    assert play_report_game(balance, 3, SHORT_SOLS) == play_report_game(balance, 3, SHORT_SOLS)
+    sols = short_sols(balance)
+    assert play_report_game(balance, 3, sols) == play_report_game(balance, 3, sols)
 
 
 def test_markdown_has_summary_and_game_rows(balance: Balance) -> None:
-    games = [play_report_game(balance, seed, SHORT_SOLS) for seed in (1, 2)]
-    args = argparse.Namespace(games=2, seed=1, sols=SHORT_SOLS)
+    sols = short_sols(balance)
+    games = [play_report_game(balance, seed, sols) for seed in (1, 2)]
+    args = argparse.Namespace(games=2, seed=1, sols=sols)
     text = render_markdown(games, args, balance)
     assert "### Сводка" in text and "### Партии" in text
     assert "Своя волна 1: роверов" in text

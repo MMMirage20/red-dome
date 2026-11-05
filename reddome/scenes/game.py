@@ -406,7 +406,7 @@ class GameScene(Scene):
             others = [i for i in everyone if i not in drones]
             if not target.complete:
                 self._report(self.sim.help_build("player", drones, target.id), tile, "build")
-            elif target.hp < self.sim.balance.buildings[target.type].hp:
+            elif target.hp < self.sim.balance.max_hp(target.side, target.type):
                 self._report(self.sim.repair("player", drones, target.id), tile, "build")
             elif target.type in DROPOFF_TYPES and any(u.carry > 0 for u in self.own_units() if u.id in drones):
                 self._report(self.sim.return_home("player", drones), tile, "gather")
