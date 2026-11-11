@@ -24,6 +24,7 @@ from reddome.render.world import WorldRenderer, tile_center
 from reddome.scenes.base import Scene
 from reddome.sim.build import can_place
 from reddome.sim.map import tile_at
+from reddome.sim.score import compute_score
 from reddome.sim.state import building_by_id, deposit_at, find_free_tile_near, unit_by_id
 from reddome.sim.simulation import Simulation
 from reddome.sim.types import Building, BuildingType, Point, Side, Unit, UnitType
@@ -637,7 +638,8 @@ class GameScene(Scene):
             self.end_ms += dt_ms
             if self.end_ms >= END_DELAY_MS:
                 self.app.start("result", outcome=state.outcome, sol=state.sol, elapsed_ms=state.elapsed_ms,
-                               stats=state.stats, difficulty=state.difficulty, background=self.app.snapshot())
+                               stats=state.stats, difficulty=state.difficulty, background=self.app.snapshot(),
+                               score=compute_score(state, self.sim.balance))
 
     def _cursor_kind(self) -> str:
         if self.targeting == "attack":

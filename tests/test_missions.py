@@ -88,3 +88,16 @@ def test_escape_returns_to_menu(app: App) -> None:
     app.step(FRAME_MS, [pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE, mod=0, unicode="")])
     app.step(FRAME_MS, [])
     assert isinstance(app.top, MenuScene)
+
+
+def test_result_shows_score(app: App) -> None:
+    from reddome.scenes.result import ResultScene
+    from reddome.sim.score import Score, ScoreLine
+    from reddome.sim.types import Outcome
+
+    score = Score((ScoreLine("win", "Победа", 1, 1000), ScoreLine("killed_unit", "Враги", 3, 20),
+                   ScoreLine("lost_colonist", "Погибшие колонисты", 0, -200)))
+    result = open_scene(app, "result", outcome=Outcome(winner="player", reason="dome_destroyed"), score=score)
+    assert isinstance(result, ResultScene)
+    assert result.score_text == "Очки: 1 060"
+    assert result.score_parts == ["Победа +1000", "Враги 3×20"]

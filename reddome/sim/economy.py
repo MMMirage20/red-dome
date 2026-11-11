@@ -7,10 +7,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from reddome.sim.types import RESOURCE_KEYS, Building, BuildingType, GameState, Side
+from reddome.sim.types import RESOURCE_KEYS, Building, BuildingType, Colony, GameState, ResourceKey, Side
 
 if TYPE_CHECKING:
     from reddome.config.balance import Balance, BuildingSpec
+
+#: Ресурсы «зелёной зоны» (очки, W3-10). Металл не входит: его приносят дроны, а не здания раз в сол.
+GREEN_RESOURCES: tuple[ResourceKey, ...] = ("energy", "water", "oxygen")
+#: Зелёная зона — запаса хватает больше чем на столько солов (ГКД в docs/charter.md).
+GREEN_SOLS_AHEAD = 3
 
 #: Порядок отключения потребителей при нехватке энергии. Купол не отключается никогда.
 ENERGY_SHUTDOWN_ORDER: tuple[BuildingType, ...] = ("hangar", "regolith", "ice_drill", "oxy_gen")
@@ -49,6 +54,16 @@ def supply_reserved(state: GameState, balance: Balance, side: Side) -> int:
         if b.side == side
         for item in b.queue
     )
+
+
+def is_green(colony: Colony) -> bool:
+    """Сол в зелёной зоне: каждого ресурса из GREEN_RESOURCES хватит больше чем на GREEN_SOLS_AHEAD солов
+    при расходе последнего сола. Ресурс, который за сол не убыл, хватает всегда."""
+    for key in GREEN_RESOURCES:
+        loss = -colony.last_delta[key]
+        if loss > 0 and colony.resources[key] <= loss * GREEN_SOLS_AHEAD:
+            return False
+    return True
 
 
 def apply_sol(state: GameState, balance: Balance, side: Side) -> None:
@@ -108,3 +123,5 @@ def apply_sol(state: GameState, balance: Balance, side: Side) -> None:
     for key in RESOURCE_KEYS:
         colony.last_delta[key] = colony.resources[key] - before[key]
     colony.sol_start_metal = colony.resources["metal"]
+    if is_green(colony):
+        colony.green_sols += 1

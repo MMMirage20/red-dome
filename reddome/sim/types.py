@@ -157,6 +157,8 @@ class Colony:
     last_delta: dict[ResourceKey, int] = field(default_factory=empty_resources)
     #: Металл в начале сола: он меняется добычей и тратами в течение сола, а не раз в сол.
     sol_start_metal: int = 0
+    #: Солы в «зелёной зоне» — для очков (W3-10), считается в economy.apply_sol.
+    green_sols: int = 0
 
 
 @dataclass
