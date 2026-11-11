@@ -1,6 +1,7 @@
 """Магазин-заглушка (ФТ-15): предложения видны, покупка пока недоступна.
 
-Демо-оплата и права доступа в SQLite — неделя 5 (ЛР13).
+Демо-оплата и права доступа в SQLite — неделя 5 (ЛР13). Сюда же ведут замки миссий 2–3 (W3-01):
+тогда «Назад» возвращает к выбору миссии.
 """
 
 from __future__ import annotations
@@ -22,9 +23,11 @@ OFFERS = (
 
 
 class ShopScene(Scene):
-    def enter(self, **data: Any) -> None:
+    def enter(self, back: str = "menu", **data: Any) -> None:
         self.sky = starfield(theme.SCREEN_SIZE, seed=11)
-        self.back = Button((theme.SCREEN_SIZE[0] // 2, 600), "Назад в меню", lambda: self.app.start("menu"))
+        back = "missions" if back == "missions" else "menu"
+        title = "Назад к миссиям" if back == "missions" else "Назад в меню"
+        self.back = Button((theme.SCREEN_SIZE[0] // 2, 600), title, lambda: self.app.start(back))
 
     def handle_event(self, event: pygame.event.Event) -> None:
         self.back.handle_event(event)

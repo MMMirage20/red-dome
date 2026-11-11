@@ -1,8 +1,6 @@
 """Главное меню (ФТ-02, B5): панорама кратера с куполом на закате, летающие дроны и пыль.
 
-Под кнопкой миссии — переключатель сложности (этап 2): щелчок или ← → меняют уровень.
-TODO W3-01 (этап 3): экран выбора миссии — миссия 1 доступна, миссии 2–3 с замком ведут в магазин;
-переключатель сложности переедет туда.
+«Играть» открывает выбор миссии (W3-01): там миссия 1, замки на 2–3 и переключатель сложности.
 """
 
 from __future__ import annotations
@@ -15,18 +13,12 @@ import pygame
 from reddome.render.backdrop import drone_frame, panorama, showcase_drone_path
 from reddome.render.lighting import Lighting
 from reddome.scenes.base import Scene
-from reddome.sim.types import DIFFICULTIES
 from reddome.ui import theme
-from reddome.ui.commands import DIFFICULTY_NAMES
 from reddome.ui.widgets import Button, card
 
 #: Панорама рисуется один раз на seed и живёт до выхода из игры.
 _panoramas: dict[int, pygame.Surface] = {}
 DRONE_TRIP_MS = 7000
-
-
-def difficulty_label(difficulty: str) -> str:
-    return f"Сложность: ‹ {DIFFICULTY_NAMES[difficulty]} ›"
 
 
 class MenuScene(Scene):
@@ -41,25 +33,14 @@ class MenuScene(Scene):
         cx = theme.SCREEN_SIZE[0] - 250
         self.card_rect = pygame.Rect(0, 0, 380, 450)
         self.card_rect.center = (cx, 440)
-        self.difficulty_button = Button((cx, 412), difficulty_label(self.app.difficulty), self.change_difficulty, height=44)
         self.buttons = [
-            Button((cx, 350), "Играть — миссия 1", lambda: self.app.start("game")),
-            self.difficulty_button,
-            Button((cx, 480), "Магазин", lambda: self.app.start("shop")),
-            Button((cx, 545), "Настройки (скоро)", lambda: None, enabled=False),
-            Button((cx, 610), "Выход", self.app.quit),
+            Button((cx, 360), "Играть", lambda: self.app.start("missions")),
+            Button((cx, 440), "Магазин", lambda: self.app.start("shop")),
+            Button((cx, 520), "Настройки (скоро)", lambda: None, enabled=False),
+            Button((cx, 600), "Выход", self.app.quit),
         ]
 
-    def change_difficulty(self, step: int = 1) -> None:
-        """Следующий (step=1) или предыдущий (step=-1) уровень по кругу: Лёгкий → Обычный → Сложный."""
-        index = DIFFICULTIES.index(self.app.difficulty)
-        self.app.difficulty = DIFFICULTIES[(index + step) % len(DIFFICULTIES)]
-        self.difficulty_button.label = difficulty_label(self.app.difficulty)
-
     def handle_event(self, event: pygame.event.Event) -> None:
-        if event.type == pygame.KEYDOWN and event.key in (pygame.K_LEFT, pygame.K_RIGHT):
-            self.change_difficulty(1 if event.key == pygame.K_RIGHT else -1)
-            return
         for button in self.buttons:
             button.handle_event(event)
 
