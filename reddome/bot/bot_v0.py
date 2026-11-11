@@ -23,6 +23,7 @@ from reddome.sim.types import Building, BuildingType, Point, Side, Unit, UnitTyp
 from reddome.sim.workers import nearest_deposit
 
 if TYPE_CHECKING:
+    from reddome.config.balance import BotSpec
     from reddome.sim.simulation import Simulation
 
 #: Радиус поиска места для обычных зданий вокруг купола, клетки.
@@ -50,8 +51,10 @@ BUILD_ORDER: tuple[BuildStep, ...] = (
 
 
 class BotV0:
-    def __init__(self, side: Side = "vector") -> None:
+    def __init__(self, side: Side = "vector", params: BotSpec | None = None) -> None:
         self.side = side
+        #: Свои числа бота вместо balance.side(side).bot — генератор датасета их слегка меняет (ФТ-17).
+        self.params = params
         self.step = 0
         self.ticks = 0
         self.waves_sent = 0
@@ -59,9 +62,12 @@ class BotV0:
         #: Отправленные волны: (время партии в мс, сколько роверов ушло) — для отчётов баланса.
         self.waves: list[tuple[int, int]] = []
 
+    def spec(self, sim: Simulation) -> BotSpec:
+        return self.params if self.params is not None else sim.balance.side(self.side).bot
+
     def on_tick(self, sim: Simulation) -> None:
         self.ticks += 1
-        if self.ticks % max(1, sim.balance.side(self.side).bot.think_interval_ms // TICK_MS) == 0:
+        if self.ticks % max(1, self.spec(sim).think_interval_ms // TICK_MS) == 0:
             self.think(sim)
 
     # --- Решения ------------------------------------------------------------------
@@ -124,13 +130,13 @@ class BotV0:
             if self._try_build(sim, "ice_drill" if generators >= drills else "oxy_gen"):
                 return
         drones = len(self._own_units(sim, "drone")) + self._queued(sim, "drone")
-        if drones < balance.side(self.side).bot.target_drones:
+        if drones < self.spec(sim).target_drones:
             sim.train(self.side, "drone")
         if self._queued(sim, "guard_rover") < 2:
             sim.train(self.side, "guard_rover")
 
     def _send_waves(self, sim: Simulation) -> None:
-        state, bot = sim.state, sim.balance.side(self.side).bot
+        state, bot = sim.state, self.spec(sim)
         if self.next_wave_ms is None:
             self.next_wave_ms = int(bot.first_wave_sec * 1000)
         if state.elapsed_ms < self.next_wave_ms:
