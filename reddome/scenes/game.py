@@ -614,7 +614,10 @@ class GameScene(Scene):
         self.time_ms += dt_ms
         self._scroll_camera(dt_ms)
         self.sim.update(dt_ms)
-        self.world.handle_events(self.sim.drain_events())
+        events = self.sim.drain_events()
+        if any(e.kind == "panel_dusted" and e.side == "player" for e in events):
+            self.show_hint("Пылевой вихрь засыпал солнечную панель — она даёт меньше энергии", theme.WARNING)
+        self.world.handle_events(events)
         self.world.update(dt_ms, self.sim)
         self.markers = update_markers(self.markers, dt_ms)
         if self.app.gestures.unavailable and not self.camera_warned:

@@ -51,6 +51,7 @@ EventKind = Literal[
     "construction_complete",
     "unit_trained",
     "deposit_depleted",
+    "panel_dusted",
 ]
 
 
@@ -99,6 +100,8 @@ class Building:
     queue: list[QueueItem] = field(default_factory=list)
     #: Точка сбора новых юнитов.
     rally: Point | None = None
+    #: Сколько ещё мс солнечная панель засыпана пылью вихря (W3-15); 0 — чистая.
+    dust_ms: int = 0
 
 
 @dataclass
@@ -144,6 +147,21 @@ class Deposit:
 
 def empty_resources() -> dict[ResourceKey, int]:
     return dict.fromkeys(RESOURCE_KEYS, 0)
+
+
+@dataclass
+class DustDevil:
+    """Пылевой вихрь (ФТ-18): идёт по прямой к точке маршрута, дойдя — выбирает следующую."""
+
+    x: float
+    y: float
+    target: Point
+    #: Сколько точек маршрута уже пройдено: от него и seed зависит следующая точка.
+    leg: int = 0
+    #: Сколько мс вихрь уже живёт.
+    age_ms: int = 0
+    #: Номер вихря за партию: у каждого свой маршрут.
+    number: int = 0
 
 
 @dataclass
@@ -195,6 +213,9 @@ class GameState:
     next_id: int = 1
     outcome: Outcome | None = None
     difficulty: Difficulty = "normal"
+    #: Текущий пылевой вихрь (не больше одного) и сколько их уже было.
+    dust_devil: DustDevil | None = None
+    dust_devils_spawned: int = 0
 
 
 @dataclass(frozen=True)

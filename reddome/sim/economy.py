@@ -82,8 +82,12 @@ def apply_sol(state: GameState, balance: Balance, side: Side) -> None:
     for b in buildings:
         b.powered = True
 
-    # 1. Энергия
-    energy_produced = sum(spec(b).energy for b in buildings if spec(b).energy > 0)
+    # 1. Энергия. Панель, засыпанная пылевым вихрем (sim/dust.py), выдаёт меньше.
+    def energy_output(b: Building) -> int:
+        dusted = b.type == "solar" and b.dust_ms > 0
+        return round(spec(b).energy * (1 - balance.dust_devil.solar_penalty)) if dusted else spec(b).energy
+
+    energy_produced = sum(energy_output(b) for b in buildings if spec(b).energy > 0)
 
     def energy_consumed() -> int:
         return sum(-spec(b).energy for b in buildings if b.powered and spec(b).energy < 0)

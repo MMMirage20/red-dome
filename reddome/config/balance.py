@@ -122,6 +122,25 @@ class BotSpec:
 
 
 @dataclass(frozen=True)
+class DustDevilSpec:
+    """Пылевой вихрь (ФТ-18, W3-15): нейтральный объект, засыпает солнечные панели на своём пути."""
+
+    #: Когда появляется первый вихрь и через сколько после исчезновения — следующий, с.
+    first_sec: float
+    interval_sec: float
+    #: Сколько вихрь живёт, прежде чем рассеяться, с.
+    lifetime_sec: float
+    #: Скорость, клеток в секунду.
+    speed: float
+    #: Радиус, в котором вихрь засыпает панели, клеток.
+    radius: float
+    #: Доля выработки, которую теряет засыпанная панель (0,5 — половину).
+    solar_penalty: float
+    #: Сколько панель остаётся засыпанной после прохода вихря, с.
+    dust_sec: float
+
+
+@dataclass(frozen=True)
 class GestureSpec:
     #: Кадр с меньшей уверенностью не считается и сбрасывает удержание.
     min_score: float
@@ -198,6 +217,7 @@ class Balance:
     bot: BotSpec
     gestures: GestureSpec
     score: ScoreSpec
+    dust_devil: DustDevilSpec
     player: PlayerSpec
     #: Итоговые числа каждой стороны с учётом сложности. Читать через side() и max_hp().
     sides: dict[Side, SideSpec]
@@ -293,6 +313,7 @@ def balance_from_dict(raw: dict[str, Any], difficulty: str | None = None) -> Bal
         bot=bot,
         gestures=GestureSpec(**raw["gestures"]),
         score=ScoreSpec(**raw["score"]),
+        dust_devil=DustDevilSpec(**raw["dust_devil"]),
         player=player,
         sides=sides,
         difficulty=level,

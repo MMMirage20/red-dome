@@ -1,6 +1,6 @@
 """Отрисовка игрового мира: карта, тени, здания, юниты, эффекты, освещение, полоски здоровья.
 
-Порядок слоёв: карта → тени → кольца выделения → здания → юниты → тонировка времени суток →
+Порядок слоёв: карта → тени → кольца выделения → здания → юниты → пылевой вихрь → тонировка времени суток →
 огни (BLEND_ADD) → эффекты → полоски → пыль → виньетка.
 """
 
@@ -18,7 +18,7 @@ from reddome.render.particles import Effects
 from reddome.render.sprites import ANGLES, SHADOW_OFFSET, SpriteBank
 from reddome.render.terrain import Terrain
 from reddome.sim.simulation import Simulation
-from reddome.sim.types import Building, SimEvent, Unit
+from reddome.sim.types import Building, DustDevil, SimEvent, Unit
 from reddome.ui import theme
 from reddome.ui.theme import Color
 
@@ -95,6 +95,8 @@ class WorldRenderer:
                 self.effects.sparks(x, y, 14)
             elif e.kind == "deposit_depleted":
                 self.effects.dust(x, y, 12)
+            elif e.kind == "panel_dusted":
+                self.effects.dust(x, y, 8)
 
     def update(self, dt_ms: float, sim: Simulation) -> None:
         self.time_ms += dt_ms
@@ -104,6 +106,11 @@ class WorldRenderer:
         weld = self._spark_ms >= 220
         if weld:
             self._spark_ms = 0
+        devil = sim.state.dust_devil
+        if devil is not None and self.effects.rng.random() < 0.6:
+            x, y = tile_center(devil.x, devil.y)
+            a = self.effects.rng.random() * math.tau
+            self.effects.dust(x + math.cos(a) * 14, y + 10 + math.sin(a) * 6)
         seen: dict[int, tuple[float, float]] = {}
         for unit in sim.state.units:
             seen[unit.id] = (unit.x, unit.y)
@@ -149,6 +156,8 @@ class WorldRenderer:
             self._draw_building(surface, b, camera)
         for u in state.units:
             self._draw_unit(surface, u, camera)
+        if state.dust_devil is not None:
+            self._draw_dust_devil(surface, state.dust_devil, camera, balance.dust_devil.lifetime_sec * 1000)
 
         lights = 0.35
         if self.graphics.day_night:
@@ -199,6 +208,10 @@ class WorldRenderer:
         left, top = x - camera[0] - w / 2, y - camera[1] - h / 2
         if b.complete:
             surface.blit(sprite, (left, top))
+            if b.type == "solar" and b.dust_ms > 0:
+                dust = pygame.Surface((w, h), pygame.SRCALPHA)
+                pygame.draw.ellipse(dust, (*theme.SAND, 120), dust.get_rect().inflate(-w * 0.2, -h * 0.35))
+                surface.blit(dust, (left, top))
             if b.type == "ice_drill" and b.powered:
                 frame = int(self.time_ms / 60) % ANGLES
                 rotor = self.sprites.get_sprite("drill_rotor", b.side, "spin", frame)
@@ -209,6 +222,36 @@ class WorldRenderer:
         if cut > 0:
             surface.blit(sprite, (left, top + h - cut), pygame.Rect(0, h - cut, w, cut))
         surface.blit(self.sprites.get_sprite(b.type, b.side, "scaffold"), (left, top))
+
+    def _draw_dust_devil(self, surface: pygame.Surface, devil: DustDevil, camera: tuple[float, float],
+                         lifetime_ms: float) -> None:
+        """Рыжая воронка: кольца пыли шире кверху, крутятся; в начале и конце жизни вихрь прозрачнее."""
+        x, y = tile_center(devil.x, devil.y)
+        x, y = x - camera[0], y - camera[1]
+        fade = min(1.0, devil.age_ms / 1500, (lifetime_ms - devil.age_ms) / 1500)
+        if fade <= 0:
+            return
+        layer = pygame.Surface((120, 150), pygame.SRCALPHA)
+        spin = self.time_ms / 140
+        rings = 12
+        for i in range(rings):
+            k = i / (rings - 1)  # 0 — у земли, 1 — вверху
+            width = 12 + 84 * k ** 1.3
+            height = 6 + 18 * k
+            sway = math.sin(spin * 0.35 + k * 3) * 8 * k
+            cy = 140 - k * 122
+            color = theme.mix((120, 62, 30), theme.SAND, k * 0.6)
+            rect = pygame.Rect(0, 0, width, height)
+            rect.center = (60 + sway, cy)
+            pygame.draw.ellipse(layer, (*color, int(70 * fade)), rect)
+            pygame.draw.ellipse(layer, (*theme.mix(color, (255, 230, 190), 0.3), int((220 - 90 * k) * fade)), rect,
+                                max(2, int(5 - 3 * k)))
+            # Яркие «пряди» на кольце показывают вращение.
+            for j in range(2):
+                a = spin * (1.4 - k * 0.6) + i * 0.9 + j * math.pi
+                px, py = rect.centerx + math.cos(a) * width / 2, rect.centery + math.sin(a) * height / 2
+                pygame.draw.circle(layer, (*theme.SAND, int(230 * fade)), (px, py), 3 if k > 0.4 else 2)
+        surface.blit(layer, (x - 60, y - 130))
 
     def _draw_unit(self, surface: pygame.Surface, u: Unit, camera: tuple[float, float]) -> None:
         x, y = tile_center(u.x, u.y)

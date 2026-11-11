@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from reddome.sim.build import cancel_construction, construction_step, place_building
 from reddome.sim.combat import apply_damage, combat_step, command_attack, command_attack_move, is_fighter
+from reddome.sim.dust import dust_step
 from reddome.sim.economy import apply_sol
 from reddome.sim.production import cancel_training, production_step, set_rally, train_unit
 from reddome.sim.rules import check_outcome
@@ -78,6 +79,7 @@ class Simulation:
         construction_step(state, balance, TICK_MS, events)
         production_step(state, balance, TICK_MS, events)
         combat_step(state, balance, TICK_MS, events)
+        dust_step(state, balance, TICK_MS, events)
 
         state.sol_elapsed_ms += TICK_MS
         if state.sol_elapsed_ms >= balance.sol_seconds * 1000:
