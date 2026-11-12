@@ -5,6 +5,9 @@
     attacking   — атакует назначенную цель (target_id), догоняя её;
     attack_move — идёт к attack_point и по дороге атакует всех встречных врагов;
     moving      — просто идёт, врагов игнорирует.
+
+Турель (этап 3) — здание с dps > 0: готовая и запитанная, сама стреляет по ближайшему врагу в радиусе,
+сначала по юнитам. Ракетный ровер бьёт здания с множителем building_damage.
 """
 
 from __future__ import annotations
@@ -31,21 +34,24 @@ def is_fighter(balance: Balance, unit: Unit) -> bool:
     return balance.units[unit.type].dps > 0
 
 
-def destroy_unit(state: GameState, unit: Unit, killer: Side, events: list[SimEvent]) -> None:
+def destroy_unit(state: GameState, unit: Unit, killer: Side | None, events: list[SimEvent]) -> None:
+    """killer=None — юнит погиб от события среды (метеорит, радиация): врагу не засчитывается."""
     state.units = [u for u in state.units if u.id != unit.id]
     state.stats[unit.side].units_lost += 1
-    state.stats[killer].enemy_units_killed += 1
+    if killer is not None:
+        state.stats[killer].enemy_units_killed += 1
     events.append(SimEvent("unit_destroyed", unit.side, unit.x, unit.y, subject=unit.type))
 
 
-def destroy_building(state: GameState, building: Building, killer: Side, events: list[SimEvent]) -> None:
+def destroy_building(state: GameState, building: Building, killer: Side | None, events: list[SimEvent]) -> None:
     state.buildings = [b for b in state.buildings if b.id != building.id]
-    state.stats[killer].enemy_buildings_destroyed += 1
+    if killer is not None:
+        state.stats[killer].enemy_buildings_destroyed += 1
     events.append(SimEvent("building_destroyed", building.side, building.x, building.y, subject=building.type))
 
 
 def apply_damage(
-    state: GameState, target: Unit | Building, amount: float, attacker: Side, events: list[SimEvent]
+    state: GameState, target: Unit | Building, amount: float, attacker: Side | None, events: list[SimEvent]
 ) -> None:
     target.hp -= amount
     if target.hp > 0:
@@ -116,9 +122,52 @@ def combat_step(state: GameState, balance: Balance, dt_ms: int, events: list[Sim
             if unit.fire_ms >= balance.combat.shot_interval_ms:
                 unit.fire_ms = 0
                 events.append(SimEvent("shot", unit.side, unit.x, unit.y, tx=target.x, ty=target.y))
-            apply_damage(state, target, spec.dps * dt_ms / 1000, unit.side, events)
+            ratio = spec.building_damage if isinstance(target, Building) else 1.0
+            apply_damage(state, target, spec.dps * ratio * dt_ms / 1000, unit.side, events)
         else:
             _chase(state, balance, unit, target)
+    turret_step(state, balance, dt_ms, events)
+
+
+def _in_reach(spec_range: float, tower: Building, target: Unit | Building) -> bool:
+    reach = spec_range + (UNIT_REACH if isinstance(target, Unit) else BUILDING_REACH)
+    return distance(tower.x, tower.y, target.x, target.y) <= reach
+
+
+def turret_target(state: GameState, tower: Building, spec_range: float) -> Unit | Building | None:
+    """Ближайший враг в радиусе турели: сначала юниты, потом здания; при равенстве — с меньшим id."""
+    for group in (state.units, state.buildings):
+        best: tuple[float, int] | None = None
+        result: Unit | Building | None = None
+        for enemy in group:
+            if enemy.side == tower.side or enemy.hp <= 0 or not _in_reach(spec_range, tower, enemy):
+                continue
+            key = (distance(tower.x, tower.y, enemy.x, enemy.y), enemy.id)
+            if best is None or key < best:
+                best, result = key, enemy
+        if result is not None:
+            return result
+    return None
+
+
+def turret_step(state: GameState, balance: Balance, dt_ms: int, events: list[SimEvent]) -> None:
+    for tower in list(state.buildings):
+        spec = balance.buildings[tower.type]
+        if spec.dps <= 0 or not tower.complete or not tower.powered or tower.hp <= 0:
+            continue
+        target = entity_by_id(state, tower.target_id)
+        if target is None or target.hp <= 0 or target.side == tower.side or not _in_reach(spec.range, tower, target):
+            target = turret_target(state, tower, spec.range)
+            tower.target_id = target.id if target is not None else None
+        if target is None:
+            tower.fire_ms = 0
+            continue
+        tower.aim = math.atan2(target.y - tower.y, target.x - tower.x)
+        tower.fire_ms += dt_ms
+        if tower.fire_ms >= balance.combat.shot_interval_ms:
+            tower.fire_ms = 0
+            events.append(SimEvent("shot", tower.side, tower.x, tower.y, tx=target.x, ty=target.y))
+        apply_damage(state, target, spec.dps * dt_ms / 1000, tower.side, events)
 
 
 def command_attack(state: GameState, balance: Balance, side: Side, unit_ids: list[int], target_id: int) -> CommandResult:

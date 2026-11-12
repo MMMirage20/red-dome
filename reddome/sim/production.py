@@ -1,4 +1,4 @@
-"""Очередь сборки юнитов (ФТ-08): купол собирает дронов, ангар — охранных роверов."""
+"""Очередь сборки юнитов (ФТ-08): купол собирает дронов, ангар — охранных и ракетных роверов."""
 
 from __future__ import annotations
 
@@ -12,11 +12,17 @@ from reddome.sim.workers import start_gathering
 if TYPE_CHECKING:
     from reddome.config.balance import Balance
 
-PRODUCER: dict[UnitType, BuildingType] = {"drone": "dome", "guard_rover": "hangar"}
+PRODUCER: dict[UnitType, BuildingType] = {"drone": "dome", "guard_rover": "hangar", "rocket_rover": "hangar"}
+#: Как назвать здание в подсказке «Нужен …».
+REQUIRED_NAMES = {"reactor": "реактор", "hangar": "ангар"}
 
 
 def _producers(state: GameState, side: Side, type: UnitType) -> list[Building]:
     return [b for b in state.buildings if b.side == side and b.type == PRODUCER[type] and b.hp > 0]
+
+
+def has_complete(state: GameState, side: Side, type: str) -> bool:
+    return any(b.side == side and b.type == type and b.complete and b.hp > 0 for b in state.buildings)
 
 
 def train_unit(
@@ -27,6 +33,8 @@ def train_unit(
     Без producer_id выбирается готовое здание стороны с самой короткой очередью.
     """
     spec = balance.units[type]
+    if not balance.mission(state.mission).allows_unit(type):
+        return CommandResult.failure("В этой миссии такой юнит недоступен")
     if producer_id is not None:
         producer = building_by_id(state, producer_id)
         if producer is None or producer.side != side or producer.type != PRODUCER[type]:
@@ -35,7 +43,9 @@ def train_unit(
     else:
         candidates = _producers(state, side, type)
         if not candidates:
-            return CommandResult.failure("Нужен ангар" if type == "guard_rover" else "Нет командного купола")
+            return CommandResult.failure("Нужен ангар" if PRODUCER[type] == "hangar" else "Нет командного купола")
+    if spec.requires is not None and not has_complete(state, side, spec.requires):
+        return CommandResult.failure(f"Нужен {REQUIRED_NAMES.get(spec.requires, spec.requires)}")
     ready = [b for b in candidates if b.complete]
     if not ready:
         return CommandResult.failure("Здание ещё строится")
