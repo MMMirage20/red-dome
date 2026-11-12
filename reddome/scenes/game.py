@@ -13,12 +13,16 @@
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import Any, cast
 
 import pygame
 
+from reddome.bot.adaptive import BotAdaptive
 from reddome.bot.base import Bot
 from reddome.bot.bot_v0 import BotV0
+from reddome.bot.factory import make_bot
+from reddome.bot.strategist import BotStrategist
+from reddome.bot.style import STYLE_NAMES
 from reddome.input.gestures import GestureFired
 from reddome.render.world import WorldRenderer, tile_center
 from reddome.scenes.base import Scene
@@ -34,6 +38,7 @@ from reddome.ui.commands import Command, commands_for
 from reddome.ui.cursor import OrderMarker, draw_markers, update_markers
 from reddome.ui.gesture_hud import describe, draw_camera_icon, draw_indicator
 from reddome.ui.hud import HUD_HEIGHT, TopBar
+from reddome.ui.objective import draw_objective
 from reddome.ui.panel import PANEL_TOP, BottomPanel, Selection
 from reddome.ui.theme import Color
 
@@ -49,17 +54,30 @@ MARKER_COLORS = {"move": theme.SUCCESS, "attack": theme.ALARM, "gather": theme.W
 CAMERA_WARNING = "Камера недоступна — жесты выключены"
 NO_DRONES = "Дронов нет"
 NO_ROVERS = "Роверов нет — соберите в ангаре"
+#: Подсказки событий среды и целей миссий (этап 3).
+EVENT_HINTS: dict[str, tuple[str, Color]] = {
+    "storm_start": ("Глобальная буря! Солнечные панели почти не дают энергии", theme.WARNING),
+    "storm_end": ("Буря стихла — панели снова работают", theme.SUCCESS),
+    "flare_start": ("Вспышка на Солнце! Роверы вне купола получают урон", theme.ALARM),
+    "flare_end": ("Вспышка закончилась", theme.SUCCESS),
+    "meteor_warning": ("Метеорит! Уведите юнитов из красного круга", theme.ALARM),
+}
 
 
 class GameScene(Scene):
-    def enter(self, seed: int | None = None, autoplay: bool = False, **data: Any) -> None:
+    def enter(self, seed: int | None = None, autoplay: bool = False, mission: int | None = None, **data: Any) -> None:
         seed = self.app.seed if seed is None else seed
-        self.sim = Simulation(self.app.balance, seed, self.app.difficulty)
-        self.bot: Bot = BotV0("vector")
+        mission = self.app.mission if mission is None else mission
+        self.app.mission = mission
+        self.sim = Simulation(self.app.balance, seed, self.app.difficulty, mission)
+        #: ВЕКТОР миссии: v0 «Новичок», «Стратег» или «Адаптивный» (balance.json → missions).
+        self.bot: Bot = make_bot(self.sim.mission.bot, "vector")
         self.sim.add_controller(self.bot)
         if autoplay:
             # Демо и скриншоты: за игрока тоже играет бот.
-            self.sim.add_controller(BotV0("player"))
+            self.sim.add_controller(BotV0("player") if mission == 1 else BotStrategist("player"))
+        self.vector_great_dome_warned = False
+        self.vector_hold_warned = False
         state = self.sim.state
         terrain = self.app.terrain_for(seed)
         self.world = WorldRenderer(self.app.sprites, self.app.graphics, self.sim, terrain)
@@ -177,7 +195,7 @@ class GameScene(Scene):
         if best is not None:
             return best[1]
         for b in state.buildings:
-            reach = 1.15 if b.type == "dome" else 0.65
+            reach = 1.15 if b.type in ("dome", "great_dome") else 0.65
             if abs(b.x - x) <= reach and abs(b.y - y) <= reach:
                 return b
         return None
@@ -491,8 +509,7 @@ class GameScene(Scene):
         elif action == "stop":
             self._report(self.sim.stop("player", everyone))
         elif action == "train" and building is not None:
-            unit_type: UnitType = "drone" if command.arg == "drone" else "guard_rover"
-            self._report(self.sim.train("player", unit_type, building.id))
+            self._report(self.sim.train("player", cast(UnitType, command.arg), building.id))
         elif action == "cancel_build" and building is not None:
             if self._report(self.sim.cancel_construction("player", building.id)):
                 self.select([])
@@ -617,6 +634,10 @@ class GameScene(Scene):
         events = self.sim.drain_events()
         if any(e.kind == "panel_dusted" and e.side == "player" for e in events):
             self.show_hint("Пылевой вихрь засыпал солнечную панель — она даёт меньше энергии", theme.WARNING)
+        for event in events:
+            if event.kind in EVENT_HINTS:
+                self.show_hint(*EVENT_HINTS[event.kind])
+        self._mission_hints()
         self.world.handle_events(events)
         self.world.update(dt_ms, self.sim)
         self.markers = update_markers(self.markers, dt_ms)
@@ -632,7 +653,8 @@ class GameScene(Scene):
         selection = self.selection()
         building = self.own_building()
         own_units = [u for u in selection.units if u.side == "player"]
-        self.panel.commands = commands_for(self.sim.balance, metal, own_units, building, self.menu)
+        ready = frozenset(b.type for b in state.buildings if b.side == "player" and b.complete)
+        self.panel.commands = commands_for(self.sim.balance, metal, own_units, building, self.menu, self.sim.mission, ready)
         if self.menu and not any(c.action == "place" for c in self.panel.commands):
             self.menu = ""
         self.app.cursor_kind = self._cursor_kind()
@@ -642,7 +664,18 @@ class GameScene(Scene):
             if self.end_ms >= END_DELAY_MS:
                 self.app.start("result", outcome=state.outcome, sol=state.sol, elapsed_ms=state.elapsed_ms,
                                stats=state.stats, difficulty=state.difficulty, background=self.app.snapshot(),
-                               score=compute_score(state, self.sim.balance))
+                               score=compute_score(state, self.sim.balance), mission=state.mission)
+
+    def _mission_hints(self) -> None:
+        """Однократные предупреждения о том, что ВЕКТОР близок к победе по цели миссии."""
+        state, mission = self.sim.state, self.sim.mission
+        if mission.goal == "great_dome" and not self.vector_great_dome_warned:
+            if any(b.side == "vector" and b.type == "great_dome" for b in state.buildings):
+                self.vector_great_dome_warned = True
+                self.show_hint("ВЕКТОР строит Большой купол! Разрушьте стройку, пока он не достроен", theme.ALARM)
+        if mission.goal == "hold_ice" and not self.vector_hold_warned and state.ice_hold_sols["vector"] >= 1:
+            self.vector_hold_warned = True
+            self.show_hint(f"ВЕКТОР держит {mission.hold_fields} ледяных поля — отбейте хотя бы одно", theme.ALARM)
 
     def _cursor_kind(self) -> str:
         if self.targeting == "attack":
@@ -686,6 +719,7 @@ class GameScene(Scene):
             pygame.draw.rect(surface, theme.SUCCESS, rect, 1)
 
         self.hud.draw(surface, state, self.sim.balance, self.time_ms)
+        draw_objective(surface, state, self.sim.balance, self.sim.mission)
         action = self.time_ms < self.commander_action_until
         self.panel.draw(surface, state, self.sim.balance, self.selection(), camera, PANEL_TOP, action,
                         len(self.idle_drones()), mouse, self.time_ms)
@@ -711,6 +745,9 @@ class GameScene(Scene):
             }[self.targeting]
         elif self.app.debug:
             text, color = "Отладка: K — победа, L — поражение", theme.TEXT_QUIET
+            if isinstance(self.bot, BotAdaptive):
+                guess = STYLE_NAMES[self.bot.style] if self.bot.style else "ещё не определён"
+                text += f" · ВЕКТОР считает ваш стиль: {guess} ({self.bot.classifier.source})"
         if not text:
             return
         label = theme.render_text(text, 17, color)

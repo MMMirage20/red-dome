@@ -11,6 +11,7 @@ from reddome.config.balance import Balance, load_balance
 from reddome.config.camera import CameraSettings
 from reddome.config.graphics import GraphicsSettings
 from reddome.input.service import GestureService
+from reddome.profile import Profile
 from reddome.render.sprites import SpriteBank
 from reddome.render.terrain import Terrain
 from reddome.scenes.base import Scene
@@ -54,6 +55,7 @@ class App:
         graphics: GraphicsSettings | None = None,
         camera: CameraSettings | None = None,
         window_flags: int = pygame.SCALED,
+        profile: Profile | None = None,
     ) -> None:
         pygame.init()
         theme.reset_fonts()
@@ -65,6 +67,10 @@ class App:
         self.balance = balance or load_balance()
         #: Сложность следующей партии: меняется в меню, «Ещё раз» на итогах играет на ней же.
         self.difficulty: Difficulty = self.balance.difficulty
+        #: Миссия следующей партии (этап 3): выбирается на экране миссий, «Ещё раз» играет её же.
+        self.mission = 1
+        #: Профиль игрока (этап 3): покупки и результаты. Без файла — в памяти, так App создаётся в тестах.
+        self.profile = profile or Profile()
         self.graphics = graphics or GraphicsSettings(show_fps=debug)
         self.sprites = SpriteBank()
         self.cursor = CursorManager()
