@@ -60,6 +60,13 @@ class SpriteBank:
                 return ellipse_shadow(26, 18, alpha=120, blur=3)
             painter = art.rover_turret if state == "turret" else art.rover_chassis
             return self._rotations(kind, side, state, painter(side))[angle]
+        if kind == "rocket_rover":
+            if state == "shadow":
+                return ellipse_shadow(28, 18, alpha=120, blur=3)
+            painter = art.rocket_launcher if state == "turret" else art.rocket_chassis
+            return self._rotations(kind, side, state, painter(side))[angle]
+        if kind == "turret_head":
+            return self._rotations(kind, side, state, art.turret_head(side))[angle]
         if kind == "drill_rotor":
             return pygame.transform.rotozoom(art.drill_rotor(side), -360 * angle / ANGLES, 1.0)
         if kind == "glow":
@@ -95,9 +102,12 @@ class SpriteBank:
             for angle in range(ANGLES):
                 jobs.append(job("drone", side, "idle", angle))
                 jobs.append(job("drone", side, "carry", angle))
-                jobs.append(job("guard_rover", side, "body", angle))
-                jobs.append(job("guard_rover", side, "turret", angle))
+                for rover in ("guard_rover", "rocket_rover"):
+                    jobs.append(job(rover, side, "body", angle))
+                    jobs.append(job(rover, side, "turret", angle))
+                jobs.append(job("turret_head", side, "head", angle))
                 jobs.append(job("drill_rotor", side, "spin", angle))
             jobs.append(job("drone", side, "shadow"))
             jobs.append(job("guard_rover", side, "shadow"))
+            jobs.append(job("rocket_rover", side, "shadow"))
         return jobs

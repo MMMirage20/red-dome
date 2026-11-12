@@ -206,6 +206,94 @@ def _hangar(side: str, powered: bool) -> pygame.Surface:
     return shrink(surface, size, size)
 
 
+def _turret(side: str, powered: bool) -> pygame.Surface:
+    """Основание турели; ствол рисуется отдельно (turret_head) и поворачивается к цели."""
+    hull, dark, team, window = palette(side)
+    size = BUILDING_SIZE
+    surface = canvas(size, size)
+    _footing(surface, 22, 28, 30, 14, dark)
+    c = (_s(22), _s(24))
+    octagon = [(c[0] + math.cos(a) * _s(14), c[1] + math.sin(a) * _s(11))
+               for a in (i / 8 * math.tau + math.pi / 8 for i in range(8))]
+    bevel_polygon(surface, octagon, mix(hull, dark, 0.3), width=int(_s(1)))
+    pygame.draw.circle(surface, team, c, _s(9.5), int(_s(1.5)))
+    for a in (math.pi * 0.75, math.pi * 0.25):
+        p = (c[0] + math.cos(a) * _s(11.5), c[1] + math.sin(a) * _s(8.5))
+        pygame.draw.circle(surface, window if powered else (70, 60, 50), p, _s(1.4))
+    return shrink(surface, size, size)
+
+
+def turret_head(side: str) -> pygame.Surface:
+    """Башня турели носом вправо: спаренные стволы и сенсор цвета команды."""
+    hull, dark, team, _ = palette(side)
+    size = BUILDING_SIZE
+    surface = canvas(size, size)
+    c = _s(size / 2)
+    for dy in (-2.2, 2.2):
+        barrel = pygame.Rect(c, c + _s(dy) - _s(1.1), _s(15), _s(2.2))
+        pygame.draw.rect(surface, mix(dark, (0, 0, 0), 0.25), barrel, border_radius=int(_s(1)))
+        pygame.draw.rect(surface, mix(hull, (255, 255, 255), 0.2), barrel, int(_s(0.5)), border_radius=int(_s(1)))
+    radial_disc(surface, (c, c), _s(7), mix(hull, (255, 255, 255), 0.35), dark)
+    pygame.draw.circle(surface, team, (c - _s(2), c), _s(2))
+    pygame.draw.circle(surface, (255, 236, 180), (c + _s(3), c), _s(1))
+    return shrink(surface, size, size)
+
+
+def _reactor(side: str, powered: bool) -> pygame.Surface:
+    """Компактный реактор: цилиндр с охлаждающими рёбрами и светящимся кольцом."""
+    hull, dark, team, _ = palette(side)
+    size = BUILDING_SIZE
+    surface = canvas(size, size)
+    _footing(surface, 22, 30, 34, 14, dark)
+    for dx in (-15, 15):
+        fin = pygame.Rect(0, 0, _s(5), _s(20))
+        fin.center = (_s(22 + dx), _s(22))
+        vertical_gradient_rect(surface, fin, hull, dark, radius=int(_s(1.5)))
+        for k in range(4):
+            y = fin.top + _s(3) + k * _s(4.5)
+            pygame.draw.line(surface, mix(dark, (0, 0, 0), 0.3), (fin.left, y), (fin.right, y), int(_s(0.6)))
+    core = pygame.Rect(_s(10), _s(8), _s(24), _s(28))
+    vertical_gradient_rect(surface, core, mix(hull, (255, 255, 255), 0.25), dark, radius=int(_s(10)))
+    ring = (120, 255, 200) if powered else (50, 80, 70)
+    pygame.draw.ellipse(surface, ring, pygame.Rect(_s(12), _s(15), _s(20), _s(9)), int(_s(2)))
+    radial_disc(surface, (_s(22), _s(19.5)), _s(4), (230, 255, 240) if powered else (90, 110, 100), ring)
+    pygame.draw.line(surface, team, (core.left + _s(3), core.bottom - _s(4)), (core.right - _s(3), core.bottom - _s(4)),
+                     int(_s(1.6)))
+    return shrink(surface, size, size)
+
+
+def _great_dome(side: str, powered: bool) -> pygame.Surface:
+    """Большой купол: широкая геодезическая полусфера с садом внутри (цель миссии 3)."""
+    hull, dark, team, window = palette(side)
+    size = DOME_SIZE
+    surface = canvas(size, size)
+    c = _s(size / 2)
+    pygame.draw.circle(surface, mix(dark, (0, 0, 0), 0.4), (c, c + _s(2)), _s(37))
+    radial_disc(surface, (c, c), _s(36), mix(hull, (255, 255, 255), 0.15), dark)
+    pygame.draw.circle(surface, team, (c, c), _s(33.5), int(_s(2.4)))
+    radial_disc(surface, (c, c), _s(31), (205, 245, 210) if powered else (140, 160, 150),
+                mix((60, 140, 80), (10, 40, 30), 0.5) if powered else (40, 60, 52), light=(-0.4, -0.45))
+    # Сад внутри.
+    for i in range(9):
+        a = i / 9 * math.tau
+        r = _s(14 + (i % 3) * 4)
+        pygame.draw.circle(surface, (96, 170, 84) if powered else (60, 90, 60), (c + math.cos(a) * r, c + math.sin(a) * r), _s(3.2))
+    layer = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+    frame = (*mix(hull, (255, 255, 255), 0.3), 170)
+    for i in range(6):
+        a = i / 6 * math.tau
+        pygame.draw.line(layer, frame, (c, c), (c + math.cos(a) * _s(31), c + math.sin(a) * _s(31)), int(_s(0.8)))
+    for r in (10, 20):
+        pygame.draw.circle(layer, frame, (c, c), _s(r), int(_s(0.8)))
+    pygame.draw.ellipse(layer, (255, 255, 255, 110), pygame.Rect(c - _s(20), c - _s(25), _s(18), _s(9)))
+    surface.blit(layer, (0, 0))
+    for i in range(12):
+        a = i / 12 * math.tau
+        p = (c + math.cos(a) * _s(34.5), c + math.sin(a) * _s(34.5))
+        pygame.draw.circle(surface, window if powered else (70, 60, 50), p, _s(1.6))
+    return shrink(surface, size, size)
+
+
 BUILDING_PAINTERS = {
     "dome": _dome,
     "solar": _solar,
@@ -213,7 +301,13 @@ BUILDING_PAINTERS = {
     "oxy_gen": _oxy_gen,
     "regolith": _regolith,
     "hangar": _hangar,
+    "turret": _turret,
+    "reactor": _reactor,
+    "great_dome": _great_dome,
 }
+
+#: Здания, которые рисуются крупным спрайтом (как командный купол).
+LARGE_BUILDINGS = ("dome", "great_dome")
 
 #: Огни зданий для свечения (смещения от центра клетки, px).
 BUILDING_LIGHTS: dict[str, list[tuple[float, float, int]]] = {
@@ -223,6 +317,9 @@ BUILDING_LIGHTS: dict[str, list[tuple[float, float, int]]] = {
     "oxy_gen": [(-7, 3, 10), (7, 3, 10)],
     "regolith": [(8, -2, 16)],
     "hangar": [(-11, 1, 10), (11, 1, 10)],
+    "turret": [(-8, 5, 8), (8, 5, 8)],
+    "reactor": [(0, -2, 18)],
+    "great_dome": [(0, 0, 46)],
 }
 
 
@@ -233,6 +330,10 @@ def building_light_color(type: str, side: str) -> Color:
         return theme.OXYGEN
     if type == "regolith":
         return (255, 140, 50)
+    if type == "reactor":
+        return (120, 255, 200)
+    if type == "great_dome":
+        return (190, 255, 190)
     return palette(side)[3]
 
 
@@ -242,7 +343,7 @@ def building_sprite(type: str, side: str, powered: bool) -> pygame.Surface:
 
 def scaffold(type: str) -> pygame.Surface:
     """Леса стройплощадки: решётка поверх проявляющегося здания."""
-    size = DOME_SIZE if type == "dome" else BUILDING_SIZE
+    size = DOME_SIZE if type in LARGE_BUILDINGS else BUILDING_SIZE
     surface = canvas(size, size)
     color = (220, 200, 160, 210)
     m = _s(6)
@@ -318,4 +419,45 @@ def rover_turret(side: str) -> pygame.Surface:
     pygame.draw.rect(surface, mix(dark, (0, 0, 0), 0.2), barrel, border_radius=int(_s(1)))
     radial_disc(surface, (c, c), _s(5.5), mix(hull, (255, 255, 255), 0.3), dark)
     pygame.draw.circle(surface, team, (c - _s(1.5), c), _s(1.6))
+    return shrink(surface, size, size)
+
+
+def rocket_chassis(side: str) -> pygame.Surface:
+    """Ракетный ровер: длинное шасси на гусеницах — отличается от охранного силуэтом."""
+    hull, dark, team, _ = palette(side)
+    size = ROVER_SIZE
+    surface = canvas(size, size)
+    c = _s(size / 2)
+    for dy in (-8, 8):
+        track = pygame.Rect(0, 0, _s(26), _s(4.5))
+        track.center = (c, c + _s(dy))
+        pygame.draw.rect(surface, (26, 24, 24), track, border_radius=int(_s(2)))
+        for k in range(6):
+            x = track.left + _s(2.5) + k * _s(4.2)
+            pygame.draw.line(surface, (70, 66, 64), (x, track.top), (x, track.bottom), int(_s(0.6)))
+    body = pygame.Rect(0, 0, _s(26), _s(13))
+    body.center = (c, c)
+    vertical_gradient_rect(surface, body, mix(hull, (255, 255, 255), 0.05), dark, radius=int(_s(3)))
+    pygame.draw.polygon(surface, team, [(body.left + _s(2), body.top + _s(2)), (body.left + _s(7), body.top + _s(2)),
+                                        (body.left + _s(5), body.bottom - _s(2)), (body.left + _s(2), body.bottom - _s(2))])
+    for dy in (-3.5, 3.5):
+        pygame.draw.circle(surface, (255, 236, 180), (body.right - _s(1.5), c + _s(dy)), _s(1.1))
+    return shrink(surface, size, size)
+
+
+def rocket_launcher(side: str) -> pygame.Surface:
+    """Пусковая установка носом вправо: блок из четырёх труб."""
+    hull, dark, team, _ = palette(side)
+    size = ROVER_SIZE
+    surface = canvas(size, size)
+    c = _s(size / 2)
+    box = pygame.Rect(0, 0, _s(15), _s(10))
+    box.center = (c + _s(1), c)
+    vertical_gradient_rect(surface, box, mix(hull, (255, 255, 255), 0.25), dark, radius=int(_s(2)))
+    for dx in (3, 7):
+        for dy in (-2.4, 2.4):
+            pygame.draw.circle(surface, (30, 28, 30), (box.left + _s(dx + 4), c + _s(dy)), _s(1.6))
+            pygame.draw.circle(surface, (255, 120, 60), (box.left + _s(dx + 4), c + _s(dy)), _s(0.7))
+    pygame.draw.line(surface, team, (box.left + _s(1.5), box.top + _s(1)), (box.left + _s(1.5), box.bottom - _s(1)),
+                     int(_s(1.6)))
     return shrink(surface, size, size)
