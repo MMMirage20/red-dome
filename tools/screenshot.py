@@ -2,7 +2,8 @@
 
 Окно не открывается (SDL dummy). За обе стороны играют боты, мышь подменяется, чтобы показать
 рамку, подсказки и призрак здания. Снимки: загрузка, меню, старт, добыча и стройка, меню стройки,
-ночь, бой, пауза, итоги и жесты (индикатор удержания, оверлей F9 без камеры, памятка в паузе).
+ночь, бой, пауза, итоги и жесты (индикатор удержания, оверлей F9 без камеры, памятка в паузе);
+этап 3 — демо-покупка, открытые миссии, буря в миссии 2 и метеорит в миссии 3. Профиль — в памяти.
 
 Камера здесь не открывается никогда: жесты эмулируются клавишами F1–F8, а для оверлея
 подставлен источник со статусом «нет камеры» — кадров с камеры на снимках быть не может.
@@ -229,7 +230,48 @@ def main(argv: list[str] | None = None) -> None:
     MOUSE[0] = (510, 564)  # наведение на «Ещё раз»
     frames(app, 5)
     save(app, args.out, "09_result")
+    stage3(app, args.out)
     pygame.quit()
+
+
+def stage3(app: App, out: Path) -> None:
+    """Этап 3: демо-покупка, открытые миссии, буря в миссии 2, метеорит в миссии 3."""
+    app.start("shop", back="missions")
+    frames(app, 2)
+    shop = app.top
+    shop.ask_purchase()  # type: ignore[union-attr]
+    MOUSE[0] = shop.pay.rect.center  # type: ignore[union-attr]
+    frames(app, 5)
+    save(app, out, "14_shop_demo")
+    shop.confirm()  # type: ignore[union-attr]
+    app.start("missions")
+    MOUSE[0] = (640, 515)
+    frames(app, 10)
+    save(app, out, "15_missions_unlocked")
+
+    app.start("game", autoplay=True, mission=2)
+    frames(app, 2)
+    scene = game_scene(app)
+    storm = round(scene.sim.balance.storm.first_sec * 1000) + 5000
+    fast_forward(scene, storm - scene.sim.state.elapsed_ms)
+    center = scene.sim.state.map.ice_fields[1]
+    scene.center_camera(center[len(center) // 2].x, center[len(center) // 2].y)
+    MOUSE[0] = (640, 300)
+    frames(app, 20)
+    save(app, out, "16_mission2_storm")
+
+    app.start("game", autoplay=True, mission=3)
+    frames(app, 2)
+    scene = game_scene(app)
+    fast_forward(scene, 200_000)
+    while scene.sim.state.outcome is None:
+        fast_forward(scene, 500)
+        marks = scene.sim.state.meteors
+        if marks and any(abs(b.x - marks[0].x) + abs(b.y - marks[0].y) <= 3 for b in scene.sim.state.buildings)                 and marks[0].impact_ms - scene.sim.state.elapsed_ms > 1500:
+            scene.center_camera(marks[0].x, marks[0].y)
+            break
+    frames(app, 20)
+    save(app, out, "17_mission3_meteor")
 
 
 if __name__ == "__main__":
