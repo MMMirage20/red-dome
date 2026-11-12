@@ -61,6 +61,17 @@ class ShopScene(Scene):
     def owned(self) -> bool:
         return self.profile is not None and self.profile.owns(FULL_EXPEDITION)
 
+    def menu_buttons(self) -> list[Button]:
+        if self.confirming:
+            return [self.pay, self.cancel]
+        return [self.back] if self.owned or self.profile is None else [self.buy, self.back]
+
+    def menu_back(self) -> None:
+        if self.confirming:
+            self.close_dialog()
+        else:
+            self.app.start(self.back_to)
+
     def ask_purchase(self) -> None:
         if self.owned or self.profile is None:
             return

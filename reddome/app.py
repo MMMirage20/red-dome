@@ -14,7 +14,7 @@ from reddome.input.service import GestureService
 from reddome.profile import Profile
 from reddome.render.sprites import SpriteBank
 from reddome.render.terrain import Terrain
-from reddome.scenes.base import Scene
+from reddome.scenes.base import MENU_GESTURE_HINT, Scene
 from reddome.scenes.boot import BootScene
 from reddome.scenes.game import GameScene
 from reddome.scenes.menu import MenuScene
@@ -166,6 +166,9 @@ class App:
             scene.draw(self.screen)
         if self.gestures.overlay:
             draw_overlay(self.screen, self.gestures)
+        if self.gestures.active and self.top is not None and self.top.menu_buttons():
+            theme.draw_text(self.screen, MENU_GESTURE_HINT, (theme.SCREEN_SIZE[0] // 2, theme.SCREEN_SIZE[1] - 14), 14,
+                            theme.TEXT_QUIET, anchor="center")
         if self.graphics.show_fps:
             theme.draw_text(self.screen, f"{self.fps:.0f} FPS", (theme.SCREEN_SIZE[0] - 110, 12), 15,
                             theme.SUCCESS if self.fps >= 30 else theme.ALARM, anchor="topright", kind="title")

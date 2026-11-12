@@ -85,6 +85,12 @@ class MissionsScene(Scene):
         free = next(m.free for m in MISSIONS if m.number == number)
         return free or (profile is not None and profile.mission_unlocked(number))
 
+    def menu_buttons(self) -> list[Button]:
+        return self.buttons
+
+    def menu_back(self) -> None:
+        self.app.start("menu")
+
     def play(self, number: int = 1) -> None:
         self.app.mission = number
         self.app.start("game", mission=number)

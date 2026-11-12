@@ -537,6 +537,8 @@ class GameScene(Scene):
             "train_drone": lambda: self._gesture_train("drone"),
             "train_rover": lambda: self._gesture_train("guard_rover"),
             "pause": self._gesture_pause,
+            "help_build": self._gesture_help_build,
+            "train_rocket": lambda: self._gesture_train("rocket_rover"),
         }
         done = handlers[fired.command]()
         if done:
@@ -606,6 +608,32 @@ class GameScene(Scene):
         ok = self._report(self.sim.return_home("player", units), tile, "move")
         return "отступают к куполу" if ok else None
 
+    def _gesture_help_build(self) -> str | None:
+        """Кулак левой: выделенные дроны (или все свободные) — на стройплощадку игрока.
+
+        Сначала Большой купол, иначе ближайшая к куполу площадка, где строителей меньше всего.
+        """
+        state = self.sim.state
+        sites = [b for b in state.buildings if b.side == "player" and not b.complete]
+        if not sites:
+            self.show_hint("Стройплощадок нет — начните стройку (B)")
+            return None
+        _, drones, _ = self._split()
+        if not drones:
+            drones = [u.id for u in self.idle_drones()]
+        if not drones:
+            drones = [u.id for u in self.player_units("drone") if u.task in ("to_resource", "gathering", "waiting")][:2]
+        if not drones:
+            self.show_hint(NO_DRONES)
+            return None
+        base = state.map.bases["player"]
+        site = min(sites, key=lambda b: (b.type != "great_dome",
+                                         sum(1 for u in state.units if u.target_id == b.id and u.task == "building"),
+                                         math.hypot(b.x - base.x, b.y - base.y), b.id))
+        if not self._report(self.sim.help_build("player", drones, site.id), Point(site.x, site.y), "build"):
+            return None
+        return f"дроны на стройку: {len(drones)}"
+
     def _gesture_train(self, unit_type: UnitType) -> str | None:
         result = self.sim.train("player", unit_type)
         producer_type = "dome" if unit_type == "drone" else "hangar"
@@ -614,7 +642,7 @@ class GameScene(Scene):
         tile = Point(producer.x, producer.y) if producer is not None else None
         if not self._report(result, tile, "build"):
             return None
-        return "дрон в очереди" if unit_type == "drone" else "ровер в очереди"
+        return {"drone": "дрон в очереди", "rocket_rover": "ракетный ровер в очереди"}.get(unit_type, "ровер в очереди")
 
     def _gesture_pause(self) -> str | None:
         self.app.push("pause", background=self.app.snapshot(), difficulty=self.sim.state.difficulty)

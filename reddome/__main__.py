@@ -43,7 +43,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--no-daynight", action="store_true", help="без смены дня и ночи")
     parser.add_argument("--camera", type=int, default=0, metavar="N", help="номер камеры для жестов (по умолчанию 0)")
     parser.add_argument("--no-gestures", action="store_true", help="не включать камеру и жесты")
-    parser.add_argument("--gesture-keys", action="store_true", help="эмуляция жестов клавишами F1–F8 (включена и в --debug)")
+    parser.add_argument("--gesture-keys", action="store_true", help="эмуляция жестов клавишами F1–F8, F10, F11 (включена и в --debug)")
     parser.add_argument("--swap-hands", action="store_true", help="поменять левую и правую руку, если камера их путает")
     parser.add_argument("--profile", type=Path, default=None, metavar="ФАЙЛ",
                         help="файл профиля SQLite: покупки и результаты (по умолчанию — в папке пользователя)")

@@ -81,6 +81,12 @@ class ResultScene(Scene):
                 Button((w // 2 + 230, bottom), "В меню", lambda: self.app.start("menu"), width=190),
             ]
 
+    def menu_buttons(self) -> list[Button]:
+        return self.buttons
+
+    def menu_back(self) -> None:
+        self.app.start("menu")
+
     def next_mission(self) -> None:
         nxt = self.mission + 1
         profile = getattr(self.app, "profile", None)

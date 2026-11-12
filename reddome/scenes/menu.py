@@ -40,6 +40,9 @@ class MenuScene(Scene):
             Button((cx, 600), "Выход", self.app.quit),
         ]
 
+    def menu_buttons(self) -> list:
+        return self.buttons
+
     def handle_event(self, event: pygame.event.Event) -> None:
         for button in self.buttons:
             button.handle_event(event)

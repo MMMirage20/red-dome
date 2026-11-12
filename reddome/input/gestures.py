@@ -24,7 +24,8 @@ HANDS: tuple[Hand, ...] = ("left", "right")
 TIME_EPSILON_MS = 1e-6
 
 GestureCommand = Literal[
-    "select_drone", "select_rovers", "attack_base", "gather", "retreat", "train_drone", "train_rover", "pause"
+    "select_drone", "select_rovers", "attack_base", "gather", "retreat", "train_drone", "train_rover", "pause",
+    "help_build", "train_rocket",
 ]
 
 #: Категории готовой модели Gesture Recognizer (официальная страница mediapipe, раздел Models).
@@ -32,7 +33,8 @@ GestureCommand = Literal[
 GESTURE_NAMES = ("None", "Closed_Fist", "Open_Palm", "Pointing_Up", "Thumb_Down", "Thumb_Up", "Victory", "ILoveYou")
 
 #: (жест, рука) → команда. Сначала ищется привязка к конкретной руке, потом к "any".
-#: Closed_Fist не занят: запасной жест на будущее.
+#: Кулак (этап 3): левой — дроны на стройку, правой — ракетный ровер; держать дольше, как атаку,
+#: потому что кулак — частая «нерабочая» поза руки.
 GESTURE_BINDINGS: dict[tuple[str, str], GestureCommand] = {
     ("Open_Palm", "left"): "select_drone",
     ("Open_Palm", "right"): "select_rovers",
@@ -42,7 +44,11 @@ GESTURE_BINDINGS: dict[tuple[str, str], GestureCommand] = {
     ("Victory", "left"): "train_drone",
     ("Victory", "right"): "train_rover",
     ("ILoveYou", "any"): "pause",
+    ("Closed_Fist", "left"): "help_build",
+    ("Closed_Fist", "right"): "train_rocket",
 }
+#: Команды, которые держат attack_hold_ms, а не hold_ms.
+LONG_HOLD: tuple[GestureCommand, ...] = ("attack_base", "help_build", "train_rocket")
 
 #: Подписи для индикатора, подсказок и памятки.
 GESTURE_TITLES = {
@@ -65,6 +71,8 @@ COMMAND_TITLES: dict[str, str] = {
     "train_drone": "собрать дрона",
     "train_rover": "собрать ровера",
     "pause": "пауза",
+    "help_build": "дроны на стройку",
+    "train_rocket": "собрать ракетный ровер",
 }
 
 
@@ -118,7 +126,7 @@ class GestureMapper:
 
     Правила для каждой руки отдельно:
     - кадр считается при уверенности ≥ min_score, иначе удержание этой руки сбрасывается;
-    - команда срабатывает, когда жест держат ≥ порога команды (атака — attack_hold_ms,
+    - команда срабатывает, когда жест держат ≥ порога команды (атака и кулаки — attack_hold_ms,
       пауза — pause_hold_ms, остальное — hold_ms);
     - одно удержание — одна команда, повтор — после смены жеста или опускания руки;
     - рука пропала из кадра — её удержание сброшено.
@@ -136,7 +144,7 @@ class GestureMapper:
         self._cooldown_until = -1.0
 
     def hold_ms(self, command: GestureCommand) -> int:
-        if command == "attack_base":
+        if command in LONG_HOLD:
             return self.settings.attack_hold_ms
         if command == "pause":
             return self.settings.pause_hold_ms

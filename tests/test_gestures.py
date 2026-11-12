@@ -111,9 +111,12 @@ def test_swap_hands_exchanges_left_and_right(balance: Balance) -> None:
     assert hold(mapper, "Victory", "right", 0, hold_ms) == ["train_drone"]
 
 
-def test_closed_fist_does_nothing(balance: Balance) -> None:
-    for hand in ("left", "right"):
-        assert hold(GestureMapper(balance.gestures), "Closed_Fist", hand, 0, 5000) == []
+def test_closed_fist_needs_long_hold(balance: Balance) -> None:
+    """Этап 3: кулак левой — дроны на стройку, правой — ракетный ровер; держать, как атаку."""
+    long_ms = balance.gestures.attack_hold_ms
+    for hand, command in (("left", "help_build"), ("right", "train_rocket")):
+        assert hold(GestureMapper(balance.gestures), "Closed_Fist", hand, 0, long_ms - 100) == []
+        assert hold(GestureMapper(balance.gestures), "Closed_Fist", hand, 0, long_ms) == [command]
 
 
 def test_holds_report_progress_for_indicator(balance: Balance) -> None:
