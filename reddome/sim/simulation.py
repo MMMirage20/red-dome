@@ -8,6 +8,8 @@ from reddome.sim.build import cancel_construction, construction_step, place_buil
 from reddome.sim.combat import apply_damage, combat_step, command_attack, command_attack_move, is_fighter
 from reddome.sim.dust import dust_step
 from reddome.sim.economy import apply_sol
+from reddome.sim.hazards import hazards_step
+from reddome.sim.objectives import update_ice_hold
 from reddome.sim.production import cancel_training, production_step, set_rally, train_unit
 from reddome.sim.rules import check_outcome
 from reddome.sim.state import building_by_id, create_initial_state, deposit_by_id, path_unit_next_to
@@ -42,13 +44,15 @@ class Controller(Protocol):
 class Simulation:
     """Время копится и обрабатывается фиксированными шагами, поэтому партия детерминирована.
 
-    Партию задают seed (карта) и сложность: одинаковые seed, сложность и команды дают одинаковую партию.
-    Без difficulty берётся сложность, на которой загружен balance.
+    Партию задают seed (карта), сложность и миссия: одинаковые seed, сложность, миссия и команды дают
+    одинаковую партию. Без difficulty берётся сложность, на которой загружен balance.
     """
 
-    def __init__(self, balance: Balance, seed: int, difficulty: Difficulty | None = None) -> None:
+    def __init__(self, balance: Balance, seed: int, difficulty: Difficulty | None = None, mission: int = 1) -> None:
         self.balance = balance if difficulty is None else balance.with_difficulty(difficulty)
-        self.state = create_initial_state(self.balance, seed)
+        #: Состав миссии (этап 3): разрешённые здания и юниты, цель, события.
+        self.mission = self.balance.mission(mission)
+        self.state = create_initial_state(self.balance, seed, mission)
         self.controllers: list[Controller] = []
         #: События для эффектов и отчётов; забираются через drain_events() и на логику не влияют.
         self.events: list[SimEvent] = []
@@ -79,7 +83,9 @@ class Simulation:
         construction_step(state, balance, TICK_MS, events)
         production_step(state, balance, TICK_MS, events)
         combat_step(state, balance, TICK_MS, events)
-        dust_step(state, balance, TICK_MS, events)
+        if self.mission.has_event("dust_devil"):
+            dust_step(state, balance, TICK_MS, events)
+        hazards_step(state, balance, self.mission, TICK_MS, events)
 
         state.sol_elapsed_ms += TICK_MS
         if state.sol_elapsed_ms >= balance.sol_seconds * 1000:
@@ -87,8 +93,10 @@ class Simulation:
             state.sol += 1
             for side in SIDES:
                 apply_sol(state, balance, side)
+            if self.mission.goal == "hold_ice":
+                update_ice_hold(state, self.mission)
 
-        state.outcome = check_outcome(state)
+        state.outcome = check_outcome(state, balance)
         if state.outcome is None:
             for controller in self.controllers:
                 controller.on_tick(self)
@@ -173,4 +181,4 @@ class Simulation:
         if building is None:
             return
         apply_damage(self.state, building, amount, opponent_of(building.side), self.events)
-        self.state.outcome = check_outcome(self.state)
+        self.state.outcome = check_outcome(self.state, self.balance)
