@@ -1,7 +1,7 @@
 """Отрисовка игрового мира: карта, тени, здания, юниты, эффекты, освещение, полоски здоровья.
 
-Порядок слоёв: карта → тени → кольца выделения → здания → юниты → пылевой вихрь → тонировка времени суток →
-огни (BLEND_ADD) → эффекты → полоски → пыль → виньетка.
+Порядок слоёв: карта → метки ледяных полей и метеоритов → тени → кольца выделения → здания → юниты →
+пылевой вихрь → тонировка времени суток → огни (BLEND_ADD) → эффекты → полоски → пыль → буря и вспышка → виньетка.
 """
 
 from __future__ import annotations
@@ -17,8 +17,9 @@ from reddome.render.lighting import Lighting
 from reddome.render.particles import Effects
 from reddome.render.sprites import ANGLES, SHADOW_OFFSET, SpriteBank
 from reddome.render.terrain import Terrain
+from reddome.sim.objectives import field_owner
 from reddome.sim.simulation import Simulation
-from reddome.sim.types import Building, DustDevil, SimEvent, Unit
+from reddome.sim.types import Building, DustDevil, GameState, Meteor, SimEvent, Unit
 from reddome.ui import theme
 from reddome.ui.theme import Color
 
@@ -97,6 +98,9 @@ class WorldRenderer:
                 self.effects.dust(x, y, 12)
             elif e.kind == "panel_dusted":
                 self.effects.dust(x, y, 8)
+            elif e.kind == "meteor_impact":
+                self.effects.explosion(x, y, big=True)
+                self.effects.dust(x, y, 18)
 
     def update(self, dt_ms: float, sim: Simulation) -> None:
         self.time_ms += dt_ms
@@ -116,7 +120,7 @@ class WorldRenderer:
             seen[unit.id] = (unit.x, unit.y)
             last = self._last_pos.get(unit.id)
             moving = last is not None and (abs(last[0] - unit.x) + abs(last[1] - unit.y)) > 0.001
-            if unit.type == "guard_rover" and moving and self.effects.rng.random() < 0.35:
+            if unit.type != "drone" and moving and self.effects.rng.random() < 0.35:
                 x, y = tile_center(unit.x, unit.y)
                 self.effects.dust(x - math.cos(unit.facing) * 10, y - math.sin(unit.facing) * 10)
             if weld and unit.task == "building":
@@ -134,6 +138,11 @@ class WorldRenderer:
         state, balance = sim.state, sim.balance
         cx, cy = camera
         self.terrain.draw(surface, camera, state.deposits)
+        if sim.mission.goal == "hold_ice":
+            self._draw_ice_fields(surface, state, camera)
+        for meteor in state.meteors:
+            self._draw_meteor_mark(surface, meteor, state.elapsed_ms, balance.meteors.radius,
+                                   balance.meteors.warning_sec * 1000, camera)
 
         if self.graphics.shadows:
             for b in state.buildings:
@@ -168,7 +177,7 @@ class WorldRenderer:
 
         for b in state.buildings:
             x, y = tile_center(b.x, b.y)
-            top = y - cy - (40 if b.type == "dome" else 24)
+            top = y - cy - (40 if b.type in art.LARGE_BUILDINGS else 24)
             if not b.complete:
                 draw_bar(surface, x - cx, top, 34, b.build_progress, theme.ACCENT)
             elif b.id in selected or b.hp < balance.max_hp(b.side, b.type) - HP_EPSILON:
@@ -183,14 +192,77 @@ class WorldRenderer:
 
         if self.graphics.particles:
             self.lighting.draw_dust(surface)
+        if state.storm_active:
+            self._draw_storm(surface)
+        if state.flare_active:
+            self._draw_flare(surface)
         self.lighting.draw_vignette(surface)
+
+    # --- События этапа 3 -----------------------------------------------------------------
+
+    def _draw_ice_fields(self, surface: pygame.Surface, state: GameState, camera: tuple[float, float]) -> None:
+        """Миссия 2: рамка вокруг каждого ледяного поля цвета того, кто его держит."""
+        for field in state.map.ice_fields:
+            owner = field_owner(state, field)
+            color = theme.team_color(owner) if owner is not None else theme.TEXT_QUIET
+            xs = [p.x for p in field]
+            ys = [p.y for p in field]
+            rect = pygame.Rect(min(xs) * TILE - camera[0], min(ys) * TILE - camera[1],
+                               (max(xs) - min(xs) + 1) * TILE, (max(ys) - min(ys) + 1) * TILE)
+            if not rect.colliderect(surface.get_rect()):
+                continue
+            pulse = 0.6 + 0.4 * math.sin(self.time_ms / 400)
+            layer = pygame.Surface(rect.inflate(12, 12).size, pygame.SRCALPHA)
+            pygame.draw.rect(layer, (*color, int(150 * pulse if owner else 90)), layer.get_rect(), 3, border_radius=14)
+            surface.blit(layer, rect.inflate(12, 12).topleft)
+
+    def _draw_meteor_mark(self, surface: pygame.Surface, meteor: Meteor, elapsed_ms: int, radius: float,
+                          warning_ms: float, camera: tuple[float, float]) -> None:
+        """Метка удара: красный круг сжимается к моменту падения, сверху — огненный след."""
+        x, y = tile_center(meteor.x, meteor.y)
+        x, y = x - camera[0], y - camera[1]
+        left = max(0.0, (meteor.impact_ms - elapsed_ms) / warning_ms)
+        r = radius * TILE
+        layer = pygame.Surface((int(r * 2 + 8), int(r * 2 + 8)), pygame.SRCALPHA)
+        center = (layer.get_width() // 2, layer.get_height() // 2)
+        blink = 0.5 + 0.5 * math.sin(self.time_ms / 90)
+        pygame.draw.circle(layer, (*theme.ALARM, int(40 + 50 * blink)), center, r)
+        pygame.draw.circle(layer, (*theme.ALARM, 230), center, r, 2)
+        pygame.draw.circle(layer, (*theme.WARNING, 230), center, max(3, r * left), 2)
+        surface.blit(layer, (x - center[0], y - center[1]))
+        # Падающий метеорит: чем ближе удар, тем ниже.
+        fall = 260 * left
+        head = (x + fall * 0.45, y - fall)
+        pygame.draw.line(surface, (255, 200, 120), head, (head[0] + 26, head[1] - 54), 3)
+        pygame.draw.circle(surface, (255, 236, 200), head, 5)
+        pygame.draw.circle(surface, (255, 140, 60), head, 5, 2)
+
+    def _draw_storm(self, surface: pygame.Surface) -> None:
+        """Глобальная буря: рыжая мгла на весь экран и полосы летящей пыли."""
+        w, h = surface.get_size()
+        haze = pygame.Surface((w, h), pygame.SRCALPHA)
+        haze.fill((150, 80, 40, 95))
+        rng_phase = self.time_ms / 6
+        for i in range(70):
+            x = (i * 137 + rng_phase * (1 + i % 3)) % (w + 200) - 100
+            y = (i * 89) % h
+            pygame.draw.line(haze, (232, 177, 122, 90), (x, y), (x + 60, y + 8), 2)
+        surface.blit(haze, (0, 0))
+
+    def _draw_flare(self, surface: pygame.Surface) -> None:
+        """Вспышка на Солнце: белёсо-жёлтое мерцание."""
+        pulse = 0.5 + 0.5 * math.sin(self.time_ms / 120)
+        flash = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+        flash.fill((255, 240, 170, int(30 + 35 * pulse)))
+        surface.blit(flash, (0, 0))
 
     def _draw_selection(self, surface: pygame.Surface, entity: Building | Unit, camera: tuple[float, float],
                         selected: bool) -> None:
         x, y = tile_center(entity.x, entity.y)
         if isinstance(entity, Building):
-            w, h = (64, 30) if entity.type == "dome" else (40, 20)
-            y += 12 if entity.type != "dome" else 18
+            large = entity.type in art.LARGE_BUILDINGS
+            w, h = (64, 30) if large else (40, 20)
+            y += 18 if large else 12
         else:
             w, h = (22, 11) if entity.type == "drone" else (30, 15)
             y += 6
@@ -217,6 +289,9 @@ class WorldRenderer:
                 rotor = self.sprites.get_sprite("drill_rotor", b.side, "spin", frame)
                 # Головка вращается над скважиной у основания вышки.
                 surface.blit(rotor, rotor.get_rect(center=(x - camera[0], top + 31)))
+            if b.type == "turret":
+                head = self.sprites.get_sprite("turret_head", b.side, "head", angle_index(b.aim, ANGLES))
+                surface.blit(head, head.get_rect(center=(x - camera[0], y - camera[1] + 2)))
             return
         cut = int(h * b.build_progress)
         if cut > 0:
@@ -262,8 +337,8 @@ class WorldRenderer:
             body = self.sprites.get_sprite("drone", u.side, state, angle_index(u.facing, ANGLES))
             surface.blit(body, body.get_rect(center=(x, y - 5 + bob)))
         else:
-            chassis = self.sprites.get_sprite("guard_rover", u.side, "body", angle_index(u.facing, ANGLES))
-            turret = self.sprites.get_sprite("guard_rover", u.side, "turret", angle_index(u.aim, ANGLES))
+            chassis = self.sprites.get_sprite(u.type, u.side, "body", angle_index(u.facing, ANGLES))
+            turret = self.sprites.get_sprite(u.type, u.side, "turret", angle_index(u.aim, ANGLES))
             surface.blit(chassis, chassis.get_rect(center=(x, y)))
             surface.blit(turret, turret.get_rect(center=(x, y)))
 

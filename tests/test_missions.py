@@ -44,7 +44,7 @@ def click(app: App, pos: tuple[int, int]) -> None:
 
 def test_only_first_mission_is_unlocked() -> None:
     assert [m.number for m in MISSIONS] == [1, 2, 3]
-    assert [m.unlocked for m in MISSIONS] == [True, False, False]
+    assert [m.free for m in MISSIONS] == [True, False, False]
 
 
 def test_menu_play_opens_mission_select(app: App) -> None:
@@ -78,7 +78,7 @@ def test_click_on_locked_card_body_opens_shop(app: App) -> None:
     scene = open_scene(app, "missions")
     assert isinstance(scene, MissionsScene)
     mission, rect = scene.cards[1]
-    assert not mission.unlocked
+    assert not mission.free
     click(app, (rect.centerx, rect.y + 90))
     assert isinstance(app.top, ShopScene)
 

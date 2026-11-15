@@ -166,17 +166,20 @@ def deplete_deposit(state: GameState, deposit: Deposit) -> None:
         state.map.tiles[tile_index(state.map, p.x, p.y)] = "ground"
 
 
-def create_initial_state(balance: Balance, seed: int) -> GameState:
-    """У каждой стороны командный купол на базе и стартовые дроны рядом; рудные поля с полным запасом."""
+def create_initial_state(balance: Balance, seed: int, mission: int = 1) -> GameState:
+    """У каждой стороны командный купол на базе и стартовые дроны рядом; рудные поля с полным запасом
+    (в миссии со своим ore_amount — с её запасом)."""
     game_map = create_map(seed)
     state = GameState(
         seed=seed,
         map=game_map,
         colonies={side: create_colony(side, balance) for side in SIDES},
         difficulty=balance.difficulty,
+        mission=mission,
     )
+    ore = balance.mission(mission).ore_amount or balance.deposit.ore_amount
     state.deposits = [
-        Deposit(id=i + 1, tiles=list(tiles), amount=balance.deposit.ore_amount, initial=balance.deposit.ore_amount)
+        Deposit(id=i + 1, tiles=list(tiles), amount=ore, initial=ore)
         for i, tiles in enumerate(game_map.ore_fields)
     ]
     for side in SIDES:

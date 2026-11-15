@@ -16,9 +16,13 @@ if TYPE_CHECKING:
 def can_place(state: GameState, balance: Balance, side: Side, type: BuildingType, x: int, y: int) -> CommandResult:
     if type == "dome":
         return CommandResult.failure("Командный купол у колонии один")
+    if not balance.mission(state.mission).allows_building(type):
+        return CommandResult.failure("В этой миссии такое здание недоступно")
     if not in_bounds(state.map, x, y):
         return CommandResult.failure("За пределами карты")
     spec = balance.buildings[type]
+    if spec.unique and any(b.side == side and b.type == type for b in state.buildings):
+        return CommandResult.failure("Такое здание у колонии может быть только одно")
     tile = tile_at(state.map, x, y)
     if spec.needs == "ice" and tile != "ice":
         return CommandResult.failure("Бур ставится только на ледяное поле")

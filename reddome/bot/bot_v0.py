@@ -34,6 +34,8 @@ BUILD_RADIUS = 9
 class BuildStep:
     kind: Literal["unit", "building"]
     type: str
+    #: Где ставить (боты этапа 3): "" — у базы, "center" — центральное ледяное поле и т.п. См. find_spot.
+    where: str = ""
 
 
 #: Порядок стройки. Отличается от исходного ТЗ: лимит армии купола мал (3 стартовых дрона + 2),
@@ -51,6 +53,9 @@ BUILD_ORDER: tuple[BuildStep, ...] = (
 
 
 class BotV0:
+    #: Порядок стройки; наследники (sim/strategist.py) задают свой.
+    build_order: tuple[BuildStep, ...] = BUILD_ORDER
+
     def __init__(self, side: Side = "vector", params: BotSpec | None = None) -> None:
         self.side = side
         #: Свои числа бота вместо balance.side(side).bot — генератор датасета их слегка меняет (ФТ-17).
@@ -74,7 +79,7 @@ class BotV0:
 
     def think(self, sim: Simulation) -> None:
         self._keep_drones_busy(sim)
-        if self.step < len(BUILD_ORDER):
+        if self.step < len(self.build_order):
             self._follow_build_order(sim)
         else:
             self._grow(sim)
@@ -100,18 +105,18 @@ class BotV0:
                     sim.gather(self.side, [drone.id], deposit.id)
 
     def _follow_build_order(self, sim: Simulation) -> None:
-        item = BUILD_ORDER[self.step]
+        item = self.build_order[self.step]
         if item.kind == "unit":
             if sim.train(self.side, cast(UnitType, item.type)).ok:
                 self.step += 1
             return
-        if self._try_build(sim, cast(BuildingType, item.type)):
+        if self._try_build(sim, cast(BuildingType, item.type), item.where):
             self.step += 1
 
-    def _try_build(self, sim: Simulation, type: BuildingType) -> bool:
+    def _try_build(self, sim: Simulation, type: BuildingType, where: str = "") -> bool:
         if self._metal(sim) < sim.balance.buildings[type].cost:
             return False
-        spot = self.find_spot(sim, type)
+        spot = self.find_spot(sim, type, where)
         return spot is not None and sim.build(self.side, type, spot.x, spot.y).ok
 
     def _grow(self, sim: Simulation) -> None:
@@ -132,8 +137,15 @@ class BotV0:
         drones = len(self._own_units(sim, "drone")) + self._queued(sim, "drone")
         if drones < self.spec(sim).target_drones:
             sim.train(self.side, "drone")
-        if self._queued(sim, "guard_rover") < 2:
-            sim.train(self.side, "guard_rover")
+        if self._queued_rovers(sim) < 2:
+            self.train_rover(sim)
+
+    def _queued_rovers(self, sim: Simulation) -> int:
+        return self._queued(sim, "guard_rover")
+
+    def train_rover(self, sim: Simulation) -> None:
+        """Какого ровера собрать; боты этапа 3 (bot/strategist.py) выбирают и ракетного."""
+        sim.train(self.side, "guard_rover")
 
     def _send_waves(self, sim: Simulation) -> None:
         state, bot = sim.state, self.spec(sim)
@@ -166,9 +178,9 @@ class BotV0:
         target = min(targets, key=lambda b: (distance(base.x, base.y, b.x, b.y), b.id))
         return find_free_tile_near(sim.state, Point(target.x, target.y), 2)
 
-    def find_spot(self, sim: Simulation, type: BuildingType) -> Point | None:
+    def find_spot(self, sim: Simulation, type: BuildingType, where: str = "") -> Point | None:
         """Ближайшая к базе подходящая клетка. Обычные здания ставятся с зазором в клетку,
-        чтобы не замуровать купол и проходы."""
+        чтобы не замуровать купол и проходы. where — подсказка для наследников (этап 3)."""
         state, balance = sim.state, sim.balance
         base = state.map.bases[self.side]
         needs = balance.buildings[type].needs

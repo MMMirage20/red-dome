@@ -1,4 +1,4 @@
-"""Эмуляция жестов клавишами F1–F8 (W3-12): для тестов, отладки и на случай, если на защите
+"""Эмуляция жестов клавишами F1–F8, F10, F11 (W3-12, этап 3): для тестов, отладки и на случай, если на защите
 не заработает камера. Пока клавиша зажата, каждый кадр игры приходит «рука с этим жестом»
 с уверенностью 1.0, поэтому удержание проверяется так же, как с камерой.
 """
@@ -19,6 +19,8 @@ KEYS: tuple[tuple[int, str, Hand, str], ...] = (
     (pygame.K_F6, "Victory", "left", "F6"),
     (pygame.K_F7, "Victory", "right", "F7"),
     (pygame.K_F8, "ILoveYou", "right", "F8"),
+    (pygame.K_F10, "Closed_Fist", "left", "F10"),
+    (pygame.K_F11, "Closed_Fist", "right", "F11"),
 )
 KEY_GESTURES: dict[int, tuple[str, Hand]] = {key: (gesture, hand) for key, gesture, hand, _ in KEYS}
 
@@ -74,7 +76,7 @@ class KeyboardGestureSource:
 
     @property
     def status_text(self) -> str:
-        return "эмуляция клавишами F1–F8"
+        return "эмуляция клавишами F1–F8, F10, F11"
 
     @property
     def fps(self) -> float:

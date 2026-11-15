@@ -15,15 +15,23 @@ DIFFICULTIES: tuple[Difficulty, ...] = ("easy", "normal", "hard")
 ResourceKey = Literal["energy", "water", "oxygen", "metal"]
 RESOURCE_KEYS: tuple[ResourceKey, ...] = ("energy", "water", "oxygen", "metal")
 
-BuildingType = Literal["dome", "solar", "ice_drill", "oxy_gen", "regolith", "hangar"]
-BUILDING_TYPES: tuple[BuildingType, ...] = ("dome", "solar", "ice_drill", "oxy_gen", "regolith", "hangar")
+BuildingType = Literal[
+    "dome", "solar", "ice_drill", "oxy_gen", "regolith", "hangar", "turret", "reactor", "great_dome"
+]
+BUILDING_TYPES: tuple[BuildingType, ...] = (
+    "dome", "solar", "ice_drill", "oxy_gen", "regolith", "hangar", "turret", "reactor", "great_dome"
+)
 
-UnitType = Literal["drone", "guard_rover"]
-UNIT_TYPES: tuple[UnitType, ...] = ("drone", "guard_rover")
+UnitType = Literal["drone", "guard_rover", "rocket_rover"]
+UNIT_TYPES: tuple[UnitType, ...] = ("drone", "guard_rover", "rocket_rover")
+
+#: Номер миссии кампании (этап 3): 1 «Высадка», 2 «Война за лёд», 3 «Последний купол».
+MISSIONS: tuple[int, ...] = (1, 2, 3)
 
 TileKind = Literal["ground", "ice", "ore", "rock"]
 
-OutcomeReason = Literal["dome_destroyed", "oxygen"]
+#: ice_held — удержаны ледяные поля (миссия 2), great_dome — достроен Большой купол (миссия 3).
+OutcomeReason = Literal["dome_destroyed", "oxygen", "ice_held", "great_dome"]
 
 #: Задачи юнита. Рабочие состояния дрона описаны в sim/workers.py, боевые — в sim/combat.py.
 UnitTask = Literal[
@@ -52,6 +60,14 @@ EventKind = Literal[
     "unit_trained",
     "deposit_depleted",
     "panel_dusted",
+    "meteor_warning",
+    "meteor_impact",
+    "storm_warning",
+    "storm_start",
+    "storm_end",
+    "flare_warning",
+    "flare_start",
+    "flare_end",
 ]
 
 
@@ -74,6 +90,8 @@ class GameMap:
     bases: dict[Side, Point]
     #: Клетки каждого рудного поля: сначала поля игрока, потом зеркальные поля ВЕКТОРа.
     ore_fields: list[list[Point]] = field(default_factory=list)
+    #: Ледяные поля (этап 3): связные группы клеток льда, от ближнего к базе игрока до ближнего к ВЕКТОРу.
+    ice_fields: list[list[Point]] = field(default_factory=list)
 
 
 @dataclass
@@ -102,6 +120,10 @@ class Building:
     rally: Point | None = None
     #: Сколько ещё мс солнечная панель засыпана пылью вихря (W3-15); 0 — чистая.
     dust_ms: int = 0
+    #: Турель (этап 3): цель, таймер выстрела для эффектов и угол ствола.
+    target_id: int | None = None
+    fire_ms: int = 0
+    aim: float = 0.0
 
 
 @dataclass
@@ -165,6 +187,16 @@ class DustDevil:
 
 
 @dataclass
+class Meteor:
+    """Метеорит (миссия 3): метка на земле появляется заранее, удар — в impact_ms."""
+
+    x: int
+    y: int
+    impact_ms: int
+    number: int
+
+
+@dataclass
 class Colony:
     side: Side
     resources: dict[ResourceKey, int]
@@ -216,7 +248,16 @@ class GameState:
     #: Текущий пылевой вихрь (не больше одного) и сколько их уже было.
     dust_devil: DustDevil | None = None
     dust_devils_spawned: int = 0
-
+    #: Миссия кампании (этап 3).
+    mission: int = 1
+    #: Сколько солов подряд сторона держит нужное число ледяных полей (миссия 2).
+    ice_hold_sols: dict[Side, int] = field(default_factory=lambda: dict.fromkeys(SIDES, 0))
+    #: Метеориты с меткой на земле, ещё не упавшие, и сколько их уже назначено (миссия 3).
+    meteors: list[Meteor] = field(default_factory=list)
+    meteors_spawned: int = 0
+    #: Идёт ли сейчас буря и вспышка: нужно, чтобы событие начала и конца пришло один раз.
+    storm_active: bool = False
+    flare_active: bool = False
 
 @dataclass(frozen=True)
 class SimEvent:

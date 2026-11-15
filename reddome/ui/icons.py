@@ -32,10 +32,15 @@ def icon(name: str, size: int) -> pygame.Surface:
 def _paint(name: str, size: int) -> pygame.Surface:
     if name in BUILDING_TYPES:
         sprite = art.building_sprite(name, "player", True)
+        if name == "turret":
+            sprite.blit(pygame.transform.rotate(art.turret_head("player"), 30), (-4, -4))
         return pygame.transform.smoothscale(sprite, (size, size))
     if name in UNIT_TYPES:
         if name == "drone":
             sprite = art.drone_sprite("player", False)
+        elif name == "rocket_rover":
+            sprite = art.rocket_chassis("player")
+            sprite.blit(art.rocket_launcher("player"), (0, 0))
         else:
             sprite = art.rover_chassis("player")
             sprite.blit(art.rover_turret("player"), (0, 0))

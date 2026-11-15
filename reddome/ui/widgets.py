@@ -79,6 +79,8 @@ class Button:
         self.on_click = on_click
         self.enabled = enabled
         self._pressed = False
+        #: Кнопка выбрана жестом (меню без мыши): рисуется как наведённая.
+        self.focused = False
 
     def handle_event(self, event: pygame.event.Event) -> bool:
         """True, если клик пришёлся на кнопку."""
@@ -94,7 +96,7 @@ class Button:
         return False
 
     def draw(self, surface: pygame.Surface) -> None:
-        hovered = self.enabled and self.rect.collidepoint(pygame.mouse.get_pos())
+        hovered = self.enabled and (self.focused or self.rect.collidepoint(pygame.mouse.get_pos()))
         if not self.enabled:
             state = "disabled"
         elif hovered and self._pressed:

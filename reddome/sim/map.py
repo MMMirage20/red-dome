@@ -74,5 +74,37 @@ def create_map(seed: int) -> GameMap:
     player_fields = [paint_disc(field, 1, "ore") for field in ORE_FIELDS]
     vector_fields = [[mirror(width, height, p) for p in tiles] for tiles in player_fields]
     game_map.ore_fields = player_fields + vector_fields
+    game_map.ice_fields = find_ice_fields(game_map)
 
     return game_map
+
+
+def find_ice_fields(game_map: GameMap) -> list[list[Point]]:
+    """Связные (по сторонам клетки) группы льда, от ближней к базе игрока к ближней к ВЕКТОРу.
+
+    На зеркальной карте их три: поле игрока, центральное (два слившихся круга) и поле ВЕКТОРа.
+    """
+    seen: set[Point] = set()
+    fields: list[list[Point]] = []
+    for i, kind in enumerate(game_map.tiles):
+        start = Point(i % game_map.width, i // game_map.width)
+        if kind != "ice" or start in seen:
+            continue
+        seen.add(start)
+        group, stack = [], [start]
+        while stack:
+            p = stack.pop()
+            group.append(p)
+            for q in (Point(p.x + 1, p.y), Point(p.x - 1, p.y), Point(p.x, p.y + 1), Point(p.x, p.y - 1)):
+                if q not in seen and tile_at(game_map, q.x, q.y) == "ice":
+                    seen.add(q)
+                    stack.append(q)
+        fields.append(sorted(group, key=lambda p: (p.y, p.x)))
+    base = game_map.bases["player"]
+
+    def distance_to_base(group: list[Point]) -> float:
+        cx = sum(p.x for p in group) / len(group)
+        cy = sum(p.y for p in group) / len(group)
+        return (cx - base.x) ** 2 + (cy - base.y) ** 2
+
+    return sorted(fields, key=distance_to_base)

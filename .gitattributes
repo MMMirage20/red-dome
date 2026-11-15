@@ -10,3 +10,6 @@
 *.task binary
 *.zip binary
 *.exe binary
+
+# Пакетные файлы Windows — всегда с CRLF
+*.bat text eol=crlf

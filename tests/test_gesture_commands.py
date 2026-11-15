@@ -182,10 +182,12 @@ def test_ily_opens_and_closes_pause(app: App, source: FakeSource, scene: GameSce
     assert app.top is scene
 
 
-def test_closed_fist_does_nothing(app: App, source: FakeSource, scene: GameScene) -> None:
+def test_right_fist_in_mission_one_only_explains(app: App, source: FakeSource, scene: GameScene) -> None:
+    """Ракетного ровера в миссии 1 нет: кулак правой роверов не трогает, а объясняет почему."""
     rovers = add_rovers(scene.sim, "player", 1)
     show(app, source, "Closed_Fist", "right", 2000)
     assert rovers[0].task == "idle" and scene.selected == []
+    assert "недоступен" in scene.hint
 
 
 def test_unavailable_camera_keeps_game_running_with_warning(app: App, monkeypatch: pytest.MonkeyPatch) -> None:

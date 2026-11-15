@@ -18,7 +18,7 @@ GREEN_RESOURCES: tuple[ResourceKey, ...] = ("energy", "water", "oxygen")
 GREEN_SOLS_AHEAD = 3
 
 #: Порядок отключения потребителей при нехватке энергии. Купол не отключается никогда.
-ENERGY_SHUTDOWN_ORDER: tuple[BuildingType, ...] = ("hangar", "regolith", "ice_drill", "oxy_gen")
+ENERGY_SHUTDOWN_ORDER: tuple[BuildingType, ...] = ("great_dome", "hangar", "regolith", "turret", "ice_drill", "oxy_gen")
 
 
 def alive_buildings(state: GameState, side: Side) -> list[Building]:
@@ -82,10 +82,17 @@ def apply_sol(state: GameState, balance: Balance, side: Side) -> None:
     for b in buildings:
         b.powered = True
 
-    # 1. Энергия. Панель, засыпанная пылевым вихрем (sim/dust.py), выдаёт меньше.
+    # 1. Энергия. Панель, засыпанная пылевым вихрем (sim/dust.py), выдаёт меньше; в бурю (sim/hazards.py) —
+    # ещё меньше. Реактор не зависит ни от того, ни от другого.
     def energy_output(b: Building) -> int:
-        dusted = b.type == "solar" and b.dust_ms > 0
-        return round(spec(b).energy * (1 - balance.dust_devil.solar_penalty)) if dusted else spec(b).energy
+        if b.type != "solar":
+            return spec(b).energy
+        ratio = 1.0
+        if b.dust_ms > 0:
+            ratio *= 1 - balance.dust_devil.solar_penalty
+        if state.storm_active:
+            ratio *= 1 - balance.storm.solar_penalty
+        return round(spec(b).energy * ratio)
 
     energy_produced = sum(energy_output(b) for b in buildings if spec(b).energy > 0)
 
@@ -115,7 +122,8 @@ def apply_sol(state: GameState, balance: Balance, side: Side) -> None:
 
     # 3. Кислород
     oxygen_produced = sum(spec(b).oxygen for b in powered("oxy_gen"))
-    rovers = sum(1 for u in state.units if u.side == side and u.hp > 0 and u.type == "guard_rover")
+    # Дышат экипажи всех боевых роверов (у дронов экипажа нет).
+    rovers = sum(1 for u in state.units if u.side == side and u.hp > 0 and balance.units[u.type].dps > 0)
     oxygen_consumed = colony.colonists * abs(balance.consumption.colonist_oxygen) + rovers * abs(
         balance.consumption.rover_crew_oxygen
     )

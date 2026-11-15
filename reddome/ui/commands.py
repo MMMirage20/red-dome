@@ -2,7 +2,8 @@
 
 W, A, S, D заняты камерой, поэтому команды на других клавишах:
 G — добывать, B — строить, E — чинить, X — стоп, R — вернуться, F — атака,
-Q — собрать юнита, T — точка сбора. В меню стройки: P, I, O, E, H; Esc — назад.
+Q — собрать юнита (у ангара Z — ракетный ровер), T — точка сбора.
+В меню стройки: P, I, O, E, H, T, R, G; Esc — назад. Миссия показывает только то, что в ней доступно.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ from dataclasses import dataclass, field
 
 import pygame
 
-from reddome.config.balance import Balance
+from reddome.config.balance import Balance, MissionSpec
 from reddome.sim.types import Building, BuildingType, Unit
 from reddome.ui import theme
 from reddome.ui.theme import Color
@@ -23,8 +24,11 @@ BUILDING_NAMES: dict[str, str] = {
     "oxy_gen": "Генератор кислорода",
     "regolith": "Переработчик реголита",
     "hangar": "Ангар",
+    "turret": "Турель",
+    "reactor": "Реактор",
+    "great_dome": "Большой купол",
 }
-UNIT_NAMES: dict[str, str] = {"drone": "Дрон", "guard_rover": "Охранный ровер"}
+UNIT_NAMES: dict[str, str] = {"drone": "Дрон", "guard_rover": "Охранный ровер", "rocket_rover": "Ракетный ровер"}
 DIFFICULTY_NAMES: dict[str, str] = {"easy": "Лёгкий", "normal": "Обычный", "hard": "Сложный"}
 
 
@@ -37,7 +41,16 @@ BUILD_KEYS: tuple[tuple[BuildingType, int, str], ...] = (
     ("oxy_gen", pygame.K_o, "O"),
     ("regolith", pygame.K_e, "E"),
     ("hangar", pygame.K_h, "H"),
+    ("turret", pygame.K_t, "T"),
+    ("reactor", pygame.K_r, "R"),
+    ("great_dome", pygame.K_g, "G"),
 )
+#: Что собирает здание: (юнит, клавиша, подпись, слот сетки).
+TRAIN_KEYS: dict[str, tuple[tuple[str, int, str, int], ...]] = {
+    "dome": (("drone", pygame.K_q, "Q", 0),),
+    "hangar": (("guard_rover", pygame.K_q, "Q", 0), ("rocket_rover", pygame.K_z, "Z", 1)),
+}
+REQUIRED_NAMES = {"reactor": "реактор"}
 RESOURCE_NAMES = {"energy": "энергии", "water": "воды", "oxygen": "кислорода", "metal": "металла"}
 
 
@@ -74,7 +87,15 @@ def building_lines(balance: Balance, type: str) -> list[tuple[str, Color]]:
         bonus = round(balance.workers.refinery_bonus * 100)
         lines.append((f"Пункт сдачи руды: +{bonus} % к грузу", theme.SUCCESS))
     if type == "hangar":
-        lines.append(("Собирает охранных роверов", theme.TEXT_QUIET))
+        lines.append(("Собирает роверов", theme.TEXT_QUIET))
+    if spec.dps:
+        lines.append((f"Стреляет сама: урон {spec.dps:g}/с, дальность {spec.range:g}", theme.TEXT_QUIET))
+    if type == "reactor":
+        lines.append(("Пыль и буря ему не мешают", theme.SUCCESS))
+        lines.append(("Открывает ракетных роверов", theme.TEXT_QUIET))
+    if type == "great_dome":
+        lines.append(("Достройте первым — победа", theme.SUCCESS))
+        lines.append(("Один на колонию", theme.WARNING))
     if spec.needs == "ice":
         lines.append(("Ставится только на лёд", theme.WARNING))
     elif spec.needs == "ore":
@@ -91,15 +112,23 @@ def unit_lines(balance: Balance, type: str) -> list[tuple[str, Color]]:
                  (f"Груз {balance.workers.carry} металла за рейс", theme.TEXT_QUIET)]
     else:
         lines = [(f"Урон {spec.dps:g}/с, дальность {spec.range:g}", theme.TEXT_QUIET)]
+        if spec.building_damage != 1:
+            lines.append((f"По зданиям ×{spec.building_damage:g}", theme.SUCCESS))
+        if spec.requires:
+            lines.append((f"Нужен {REQUIRED_NAMES.get(spec.requires, spec.requires)}", theme.WARNING))
     lines.append((f"Сборка {spec.build_time_sec:g} с · лимит армии {spec.supply}", theme.TEXT_QUIET))
     return lines
 
 
 def commands_for(balance: Balance, metal: int, units: list[Unit], building: Building | None,
-                 menu: str) -> list[Command]:
-    """Команды для выделенных юнитов игрока или его здания."""
+                 menu: str, mission: MissionSpec | None = None, ready: frozenset[str] = frozenset()) -> list[Command]:
+    """Команды для выделенных юнитов игрока или его здания.
+
+    mission — что доступно в миссии (без неё — всё); ready — типы готовых зданий игрока (для «Нужен реактор»).
+    """
+    mission = mission or balance.mission(1)
     if building is not None:
-        return _building_commands(balance, metal, building)
+        return _building_commands(balance, metal, building, mission, ready)
     drones = [u for u in units if u.type == "drone"]
     fighters = [u for u in units if balance.units[u.type].dps > 0]
     if not units:
@@ -107,6 +136,8 @@ def commands_for(balance: Balance, metal: int, units: list[Unit], building: Buil
     if menu == "build" and drones:
         commands = []
         for slot, (type_, key, label) in enumerate(BUILD_KEYS):
+            if not mission.allows_building(type_):
+                continue
             cost = balance.buildings[type_].cost
             commands.append(Command(slot, key, label, type_, BUILDING_NAMES[type_], "place", type_,
                                     building_lines(balance, type_), cost, metal >= cost))
@@ -137,18 +168,22 @@ def commands_for(balance: Balance, metal: int, units: list[Unit], building: Buil
     return commands
 
 
-def _building_commands(balance: Balance, metal: int, building: Building) -> list[Command]:
+def _building_commands(balance: Balance, metal: int, building: Building, mission: MissionSpec,
+                       ready: frozenset[str]) -> list[Command]:
     if not building.complete:
         refund = round(balance.buildings[building.type].cost * balance.construction.refund_ratio)
         return [Command(8, pygame.K_x, "X", "cancel", "Отменить стройку", "cancel_build",
                         lines=[(f"Вернётся {refund} металла", theme.TEXT_QUIET)])]
-    produces = {"dome": "drone", "hangar": "guard_rover"}.get(building.type)
-    if produces is None:
+    trains = [t for t in TRAIN_KEYS.get(building.type, ()) if mission.allows_unit(t[0])]
+    if not trains:
         return []
-    cost = balance.units[produces].cost
-    commands = [
-        Command(0, pygame.K_q, "Q", produces, f"Собрать: {UNIT_NAMES[produces].lower()}", "train", produces,
-                unit_lines(balance, produces), cost, metal >= cost),
+    commands = []
+    for unit_type, key, label, slot in trains:
+        spec = balance.units[unit_type]
+        ok = metal >= spec.cost and (spec.requires is None or spec.requires in ready)
+        commands.append(Command(slot, key, label, unit_type, f"Собрать: {UNIT_NAMES[unit_type].lower()}", "train",
+                                unit_type, unit_lines(balance, unit_type), spec.cost, ok))
+    commands += [
         Command(2, pygame.K_t, "T", "rally", "Точка сбора", "rally",
                 lines=[("Куда пойдут новые юниты", theme.TEXT_QUIET),
                        ("Точка на руде — дроны сразу добывают", theme.TEXT_QUIET)]),

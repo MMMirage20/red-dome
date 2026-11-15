@@ -34,6 +34,8 @@ CONTROLS = (
     ("B, затем P · I · O · E · H", "панель, бур, генератор, переработчик, ангар"),
 )
 TABS = ("Клавиши", "Жесты")
+#: Высота строки памятки жестов: 10 жестов должны поместиться в карточку.
+ROW = 36
 HAND_ANY = "любая"
 
 
@@ -54,7 +56,7 @@ class PauseScene(Scene):
         self.background = background
         self.difficulty_text = difficulty_line(difficulty or self.app.difficulty)
         w, h = theme.SCREEN_SIZE
-        self.card_rect = pygame.Rect(0, 0, 860, 470)
+        self.card_rect = pygame.Rect(0, 0, 860, 510)
         self.card_rect.center = (w // 2, h // 2)
         bx = self.card_rect.x + 190
         self.buttons = [
@@ -82,8 +84,17 @@ class PauseScene(Scene):
             button.handle_event(event)
 
     def on_gesture(self, fired: GestureFired) -> None:
+        """ILY закрывает паузу; остальные жесты ходят по кнопкам (Scene.on_gesture), «назад» — продолжить."""
         if fired.command == "pause":
             self.app.pop()
+            return
+        super().on_gesture(fired)
+
+    def menu_buttons(self) -> list:
+        return self.buttons
+
+    def menu_back(self) -> None:
+        self.app.pop()
 
     def draw(self, surface: pygame.Surface) -> None:
         if self.background is not None:
@@ -117,18 +128,17 @@ class PauseScene(Scene):
     def _draw_gestures(self, surface: pygame.Surface, x: int, top: int) -> None:
         keys_on = self.app.gestures.keys is not None
         for i, (gesture, hand, command, key) in enumerate(gesture_rows()):
-            y = top + i * 40
-            surface.blit(icon(GESTURE_ICONS[gesture], 34), (x, y))
+            y = top + i * ROW
+            surface.blit(icon(GESTURE_ICONS[gesture], 30), (x, y))
             theme.draw_text(surface, f"{GESTURE_TITLES[gesture][:1].upper()}{GESTURE_TITLES[gesture][1:]}, {hand}", (x + 44, y + 1), 15, theme.WARNING,
                             kind="title")
             theme.draw_text(surface, command, (x + 44, y + 19), 14, theme.TEXT_QUIET)
             if keys_on and key:
                 theme.draw_text(surface, key, (self.card_rect.right - 30, y + 10), 14, theme.TEXT_QUIET, anchor="topright",
                                 kind="title")
-        y = top + 8 * 40
-        surface.blit(icon(GESTURE_ICONS["Closed_Fist"], 26), (x + 4, y))
-        hint = "Кулак не занят. Левая рука — экономика, правая — армия."
-        theme.draw_text(surface, hint, (x + 44, y + 5), 14, theme.TEXT_QUIET)
+        y = top + len(gesture_rows()) * ROW + 4
+        hint = "Левая рука — экономика и дроны, правая — армия и роверы."
+        theme.draw_text(surface, hint, (x, y + 5), 13, theme.TEXT_QUIET)
         status = self.app.gestures.status_text if self.app.gestures.unavailable else ""
         if status:
             theme.draw_text(surface, f"Камера: {status}", (x, y + 32), 13, theme.WARNING)

@@ -57,3 +57,41 @@ def test_recognizer_finds_no_hands_on_blank_frame() -> None:
     with vision.GestureRecognizer.create_from_options(options) as recognizer:
         image = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.zeros((240, 320, 3), np.uint8))
         assert parse_result(recognizer.recognize_for_video(image, 1)) == []
+
+
+class _FakeCapture:
+    def __init__(self, opened: bool) -> None:
+        self.opened = opened
+        self.released = False
+
+    def isOpened(self) -> bool:  # noqa: N802 — имя как у cv2.VideoCapture
+        return self.opened
+
+    def set(self, *args: object) -> None:
+        pass
+
+    def release(self) -> None:
+        self.released = True
+
+
+class _FakeCv2:
+    CAP_MSMF, CAP_DSHOW, CAP_ANY = 1400, 700, 0
+    CAP_PROP_FRAME_WIDTH, CAP_PROP_FRAME_HEIGHT = 3, 4
+
+    def __init__(self, working: set[int]) -> None:
+        self.working = working
+        self.tried: list[int] = []
+
+    def VideoCapture(self, index: int, api: int) -> _FakeCapture:  # noqa: N802
+        self.tried.append(api)
+        return _FakeCapture(api in self.working)
+
+
+def test_open_capture_tries_backends_in_order() -> None:
+    """Этап 3: камера открывается через раз — пробуем MSMF, DirectShow, потом выбор OpenCV."""
+    source = MediaPipeGestureSource(CameraSettings())
+    fake = _FakeCv2({_FakeCv2.CAP_ANY})
+    assert source._open_capture(fake) is not None
+    assert fake.tried == [_FakeCv2.CAP_MSMF, _FakeCv2.CAP_DSHOW, _FakeCv2.CAP_ANY]
+    fake = _FakeCv2(set())
+    assert source._open_capture(fake) is None
