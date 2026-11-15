@@ -28,6 +28,10 @@ NO_FRAMES_TIMEOUT_S = 5.0
 #: cv2.VideoCapture может повиснуть при открытии (камеру держит другая программа или нет доступа
 #: в настройках Windows). Прервать его нельзя, поэтому через это время считаем камеру недоступной.
 OPEN_TIMEOUT_S = 10.0
+#: Камера не открылась или пропала — через столько секунд пробуем снова, пока игра запущена.
+#: На этом ноутбуке камера открывается через раз (её на миг занимает другая программа или она
+#: выключена клавишей/шторкой), поэтому жесты должны включаться сами, без перезапуска игры.
+RETRY_S = 3.0
 
 
 class MediaPipeGestureSource:
@@ -112,28 +116,47 @@ class MediaPipeGestureSource:
         if not self.settings.model_path.exists():
             self._set_status("no_model")
             return
-        capture = cv2.VideoCapture(self.settings.index)
-        if not capture.isOpened():
+        attempt = 0
+        while not self._stop.is_set():
+            attempt += 1
+            capture = self._open_capture(cv2)
+            if capture is None:
+                self._set_status("no_camera", f"попытка {attempt}, повтор через {RETRY_S:.0f} с")
+                self._stop.wait(RETRY_S)
+                continue
+            recognizer: Any = None
+            try:
+                options = vision.GestureRecognizerOptions(
+                    base_options=BaseOptions(model_asset_path=str(self.settings.model_path)),
+                    running_mode=vision.RunningMode.VIDEO,
+                    num_hands=2,
+                )
+                # Новый распознаватель на каждое подключение: метки времени VIDEO начинаются заново.
+                recognizer = vision.GestureRecognizer.create_from_options(options)
+                self._loop(cv2, mp, capture, recognizer)
+            except Exception as error:  # noqa: BLE001 — статус ошибки показывается в оверлее F9
+                self._set_status("error", f"{type(error).__name__}: {error}"[:120])
+                return
+            finally:
+                capture.release()
+                if recognizer is not None:
+                    recognizer.close()
+            if not self._stop.is_set():
+                self._stop.wait(RETRY_S)
+
+    def _open_capture(self, cv2: Any) -> Any:
+        """Камера по номеру: сначала Media Foundation, потом DirectShow, потом выбор OpenCV. None — не открылась."""
+        backends = [getattr(cv2, name) for name in ("CAP_MSMF", "CAP_DSHOW") if hasattr(cv2, name)]
+        for api in [*backends, cv2.CAP_ANY]:
+            if self._stop.is_set():
+                return None
+            capture = cv2.VideoCapture(self.settings.index, api)
+            if capture.isOpened():
+                capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                return capture
             capture.release()
-            self._set_status("no_camera")
-            return
-        capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        recognizer: Any = None
-        try:
-            options = vision.GestureRecognizerOptions(
-                base_options=BaseOptions(model_asset_path=str(self.settings.model_path)),
-                running_mode=vision.RunningMode.VIDEO,
-                num_hands=2,
-            )
-            recognizer = vision.GestureRecognizer.create_from_options(options)
-            self._loop(cv2, mp, capture, recognizer)
-        except Exception as error:  # noqa: BLE001 — статус ошибки показывается в оверлее F9
-            self._set_status("error", f"{type(error).__name__}: {error}"[:120])
-        finally:
-            capture.release()
-            if recognizer is not None:
-                recognizer.close()
+        return None
 
     def _loop(self, cv2: Any, mp: Any, capture: Any, recognizer: Any) -> None:
         started = time.monotonic()
@@ -144,7 +167,7 @@ class MediaPipeGestureSource:
             ok, frame = capture.read()
             if not ok or frame is None:
                 if time.monotonic() - last_frame > NO_FRAMES_TIMEOUT_S:
-                    self._set_status("no_camera", f"нет кадров {NO_FRAMES_TIMEOUT_S:.0f} с")
+                    self._set_status("no_camera", f"нет кадров {NO_FRAMES_TIMEOUT_S:.0f} с, переподключаюсь")
                     return
                 time.sleep(0.02)
                 continue

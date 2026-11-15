@@ -673,6 +673,10 @@ class GameScene(Scene):
             # НФТ-06: предупреждение один раз за партию; причина видна в оверлее F9.
             self.camera_warned = True
             self.show_hint(CAMERA_WARNING, theme.WARNING)
+        elif self.camera_warned and self.app.gestures.status == "running":
+            # Камера переподключилась сама (input/camera.py, RETRY_S).
+            self.camera_warned = False
+            self.show_hint("Камера подключилась — жесты включены", theme.SUCCESS)
 
         state = self.sim.state
         alive = {u.id for u in state.units} | {b.id for b in state.buildings}
