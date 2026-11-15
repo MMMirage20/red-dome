@@ -18,7 +18,7 @@ from reddome.app import App  # noqa: E402
 from reddome.input.gestures import GestureFrame, Hand, SourceResult, SourceStatus  # noqa: E402
 from reddome.scenes.game import CAMERA_WARNING, GameScene  # noqa: E402
 from reddome.scenes.pause import PauseScene  # noqa: E402
-from reddome.sim.state import chebyshev  # noqa: E402
+from reddome.sim.state import add_unit, chebyshev, find_free_tile_near  # noqa: E402
 from tests.helpers import add_rovers  # noqa: E402
 
 FRAME_MS = 1000 / 60
@@ -105,13 +105,26 @@ def test_left_palm_selects_one_drone_and_next_on_repeat(app: App, source: FakeSo
     show(app, source, "Open_Palm", "left", hold)
     second = list(scene.selected)
     assert len(second) == 1 and second[0] in drones(scene) and second != first
-    assert scene.commander_action_until > scene.time_ms - 1000  # Аян в Action
+    assert scene.commander_action_until > scene.time_ms - 1000  # Аян отдаёт приказ
 
 
 def test_right_palm_selects_all_rovers(app: App, source: FakeSource, scene: GameScene) -> None:
     rovers = add_rovers(scene.sim, "player", 3)
     show(app, source, "Open_Palm", "right", app.balance.gestures.hold_ms)
     assert sorted(scene.selected) == sorted(r.id for r in rovers)
+
+
+def test_right_palm_and_thumb_down_include_rocket_rovers(app: App, source: FakeSource, scene: GameScene) -> None:
+    """Миссии 2–3: «все роверы» и «отступить» — это и ракетные роверы, а не только охранные."""
+    guards = add_rovers(scene.sim, "player", 2)
+    base = scene.sim.state.map.bases["player"]
+    rocket = add_unit(scene.sim.state, scene.sim.balance, "player", "rocket_rover", find_free_tile_near(scene.sim.state, base))
+    show(app, source, "Open_Palm", "right", app.balance.gestures.hold_ms)
+    assert sorted(scene.selected) == sorted([*(r.id for r in guards), rocket.id])
+    scene.select([])
+    rocket.x += 8
+    show(app, source, "Thumb_Down", "right", app.balance.gestures.hold_ms)
+    assert rocket.task == "moving"
 
 
 def vector_dome_near(scene: GameScene, unit_id: int) -> bool:

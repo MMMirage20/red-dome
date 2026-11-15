@@ -160,6 +160,41 @@ def test_report_row_knows_stage_three_outcomes(reason: str) -> None:
 
 
 
+def test_mission_card_goal_takes_numbers_from_balance(balance: Balance) -> None:
+    from reddome.scenes.missions import MISSIONS as CARDS, MissionsScene
+
+    class FakeApp:
+        pass
+
+    app = FakeApp()
+    app.balance = balance  # type: ignore[attr-defined]
+    scene = MissionsScene.__new__(MissionsScene)
+    scene.app = app  # type: ignore[assignment]
+    spec = balance.mission(2)
+    text = scene.goal_text(CARDS[1])
+    assert f"{spec.hold_sols_for('player')} солов" in text and "{" not in text
+    assert scene.goal_text(CARDS[0]) == CARDS[0].goal
+
+
+@pytest.mark.parametrize("mission", [2, 3])
+def test_storm_banner_does_not_cover_objective_card(balance: Balance, mission: int) -> None:
+    import os
+
+    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+    import pygame
+
+    from reddome.ui import theme
+    from reddome.ui.objective import draw_objective
+
+    pygame.init()
+    theme.reset_fonts()
+    sim = Simulation(balance, seed=1, mission=mission)
+    sim.state.elapsed_ms = round((sim.balance.storm.first_sec + 5) * 1000)
+    surface = pygame.Surface(theme.SCREEN_SIZE)
+    card, banner = draw_objective(surface, sim.state, sim.balance, sim.mission)
+    assert banner is not None and not banner.colliderect(card)
+
+
 def test_tech_counter_stops_once_reactor_has_paid_off(balance: Balance) -> None:
     """Устав: против «техно» — быстрая атака, пока реактор не окупился; потом — обычные волны."""
     sim = Simulation(balance, seed=1, mission=3)

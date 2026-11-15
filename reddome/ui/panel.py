@@ -178,7 +178,7 @@ class BottomPanel:
         self._draw_minimap(surface, state, camera, view_height)
         surface.blit(self.portraits[action], PORTRAIT_RECT)
         theme.draw_text(surface, "Аян", (PORTRAIT_RECT.x + 8, PORTRAIT_RECT.bottom - 24), 17, theme.TEXT, kind="title", shadow=True)
-        theme.draw_text(surface, "Action" if action else "Idle", (PORTRAIT_RECT.right - 8, PORTRAIT_RECT.bottom - 22), 13,
+        theme.draw_text(surface, "приказ" if action else "ждёт", (PORTRAIT_RECT.right - 8, PORTRAIT_RECT.bottom - 22), 13,
                         theme.WARNING if action else theme.TEXT_QUIET, anchor="topright")
         self._draw_info(surface, state, balance, selection, time_ms)
         self._draw_grid(surface, state, mouse)

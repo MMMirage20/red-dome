@@ -547,8 +547,12 @@ class GameScene(Scene):
     def _gesture_select_drone(self) -> str | None:
         return "выбран дрон" if self._select_idle_drone(any_drone=True) is not None else None
 
+    def player_fighters(self) -> list[Unit]:
+        """Все боевые юниты игрока: охранные и ракетные роверы (этап 3)."""
+        return [u for u in self.sim.state.units if u.side == "player" and self.sim.is_fighter(u)]
+
     def _gesture_select_rovers(self) -> str | None:
-        rovers = self.player_units("guard_rover")
+        rovers = self.player_fighters()
         if not rovers:
             self.show_hint(NO_ROVERS)
             return None
@@ -559,7 +563,7 @@ class GameScene(Scene):
         """Выделенные роверы (или все, если среди выделенных роверов нет) идут атакой с движением к куполу ВЕКТОРа."""
         _, _, fighters = self._split()
         if not fighters:
-            fighters = [u.id for u in self.sim.state.units if u.side == "player" and self.sim.is_fighter(u)]
+            fighters = [u.id for u in self.player_fighters()]
         if not fighters:
             self.show_hint(NO_ROVERS)
             return None
@@ -599,7 +603,7 @@ class GameScene(Scene):
         """«Отступить»: выделенные юниты, а если ничего не выделено — все роверы, к куполу."""
         units, _, _ = self._split()
         if not units:
-            units = [u.id for u in self.player_units("guard_rover")]
+            units = [u.id for u in self.player_fighters()]
         if not units:
             self.show_hint(NO_ROVERS)
             return None
