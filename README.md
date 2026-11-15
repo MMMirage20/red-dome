@@ -85,6 +85,7 @@ red-dome/
 │   ├── sim_cli.py               партии «бот против бота» без графики → CSV для ML; отчёт баланса по миссии
 │   ├── balance_matrix.py        матрица баланса: 3 миссии × сложность × 3 «заменителя» игрока
 │   ├── ui_playtest.py           прогон миссии через интерфейс без окна: мышь и клавиши, лог и снимки
+│   ├── build_windows.py         сборка RedDome.exe и zip для itch.io (PyInstaller); reddome_launcher.py — точка входа
 │   ├── style_bots.py            скрипты игрока с заданным стилем (раш, черепаха, экономист, техно)
 │   ├── train_style.py           обучение классификатора стиля → reddome/bot/style_model.json и docs/ml
 │   ├── gesture_bench.py         замер точности жестов с камеры → CSV
@@ -203,6 +204,12 @@ python -m tools.sim_cli --games 12 --seed 1 --report --difficulty normal --missi
 
 ```bash
 python -m tools.balance_matrix --games 12 --difficulty easy normal hard
+```
+
+Сборка для Windows (itch.io): папка `dist/RedDome` с `RedDome.exe` и архив `dist/RedDome-windows.zip`. Нужны `requirements-ai.txt` и `pyinstaller`; модель жестов в архив не входит — игра скачивает её с сервера Google при первом запуске в `%APPDATA%\RedDome\models`. Проверка собранной игры без окна: `dist\RedDome\RedDome.exe --selftest отчёт.txt`.
+
+```bash
+python -m tools.build_windows
 ```
 
 Прогон миссии через интерфейс без окна: «игрок» проходит меню, магазин, партию и итоги только мышью и клавишами, как человек; лог с подсказками игры и снимки экрана — в `playtest_out/` (в git не попадает). Около 2 минут на партию:

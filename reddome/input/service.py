@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import csv
+import sys
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
@@ -27,6 +28,7 @@ from reddome.input.gestures import (
     SourceStatus,
 )
 from reddome.input.keyboard import KeyboardGestureSource
+from reddome.profile import default_profile_path
 
 if TYPE_CHECKING:
     import numpy
@@ -34,6 +36,9 @@ if TYPE_CHECKING:
     from reddome.config.balance import GestureSpec
 
 LOG_DIR = Path(__file__).resolve().parents[2] / "ml" / "data"
+if getattr(sys, "frozen", False):
+    # Сборка PyInstaller (itch.io): лог — в папку пользователя рядом с профилем, а не внутрь папки игры.
+    LOG_DIR = default_profile_path().parent / "logs"
 LOG_COLUMNS = ("time_ms", "gesture", "hand", "score", "command", "source")
 LOG_FLUSH_MS = 2000
 OVERLAY_KEY = pygame.K_F9
@@ -58,13 +63,16 @@ class GestureLog:
     def flush(self) -> None:
         if not self._rows:
             return
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        new_file = not self.path.exists()
-        with self.path.open("a", newline="", encoding="utf-8") as file:
-            writer = csv.writer(file)
-            if new_file:
-                writer.writerow(LOG_COLUMNS)
-            writer.writerows(self._rows)
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            new_file = not self.path.exists()
+            with self.path.open("a", newline="", encoding="utf-8") as file:
+                writer = csv.writer(file)
+                if new_file:
+                    writer.writerow(LOG_COLUMNS)
+                writer.writerows(self._rows)
+        except OSError:
+            pass  # Лог только для замеров точности: без доступа к папке игра идёт дальше без него.
         self._rows.clear()
 
 

@@ -27,9 +27,18 @@ def test_parse_result_maps_handedness_and_best_gesture() -> None:
     assert [(f.gesture, f.hand, round(f.score, 2)) for f in frames] == [("Open_Palm", "left", 0.91), ("Victory", "right", 0.77)]
 
 
-def test_missing_model_reports_no_model_without_opening_camera(tmp_path: Path) -> None:
+def test_missing_model_reports_no_model_without_opening_camera(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     pytest.importorskip("mediapipe")
     pytest.importorskip("cv2")
+    from reddome.input import camera, model_download
+
+    # Модели нет и в папке пользователя, а скачать её нельзя (без сети): статус no_model, камера не трогается.
+    monkeypatch.setattr(model_download, "user_models_dir", lambda: tmp_path / "user")
+
+    def no_network() -> Path:
+        raise model_download.ModelDownloadError("нет сети")
+
+    monkeypatch.setattr(camera, "download_gesture_model", no_network)
     source = MediaPipeGestureSource(CameraSettings(model_path=tmp_path / "нет.task"))
     source.start()
     deadline = time.monotonic() + 10
