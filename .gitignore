@@ -29,3 +29,6 @@ vosk-model-*/
 
 .claude/
 *.log
+
+# Прогоны tools/ui_playtest.py
+playtest_out/
