@@ -40,7 +40,11 @@
     "enemy_field_from_sec": 480,
     "rush_hold_sols": 3,
     "classify_from_sec": 180,
-    "great_dome_from_sec": 600
+    "great_dome_from_sec": 600,
+    "economy_raid_sec": 20,
+    "tech_attack_size": 3,
+    "tech_window_sec": 240,
+    "max_fighters": 0
   },
   "gestures": { "min_score": 0.7, "hold_ms": 500, "attack_hold_ms": 800, "pause_hold_ms": 1000, "cooldown_ms": 600 },
   "dust_devil": { "first_sec": 120, "interval_sec": 150, "lifetime_sec": 90, "speed": 1.2, "radius": 1.5, "solar_penalty": 0.5, "dust_sec": 60 },
@@ -54,7 +58,12 @@
       "units": ["drone", "guard_rover"],
       "bot": "novice",
       "goal": "destroy_dome",
-      "events": ["dust_devil"]
+      "events": ["dust_devil"],
+      "overrides": {
+        "player": { "start_metal": 250, "dome_hp": 2500 },
+        "buildings": { "dome": { "hp": 1200 } },
+        "bot": { "target_drones": 4, "first_wave_sec": 330, "wave_interval_sec": 240, "wave_size_start": 1, "wave_growth_every": 2, "max_fighters": 8 }
+      }
     },
     "2": {
       "title": "Война за лёд",
@@ -63,9 +72,14 @@
       "bot": "strategist",
       "goal": "hold_ice",
       "events": ["dust_devil", "storm"],
-      "ore_amount": 2000,
+      "ore_amount": 2500,
       "hold_fields": 2,
-      "hold_sols": 10
+      "hold_sols": 5,
+      "vector_hold_sols": 10,
+      "overrides": {
+        "player": { "start_metal": 250 },
+        "bot": { "first_wave_sec": 330, "wave_interval_sec": 240, "center_from_sec": 360, "enemy_field_from_sec": 720, "max_fighters": 8 }
+      }
     },
     "3": {
       "title": "Последний купол",
@@ -73,7 +87,14 @@
       "units": ["drone", "guard_rover", "rocket_rover"],
       "bot": "adaptive",
       "goal": "great_dome",
-      "events": ["dust_devil", "storm", "meteors", "solar_flare"]
+      "events": ["dust_devil", "storm", "meteors", "solar_flare"],
+      "overrides": {
+        "player": { "start_metal": 250 },
+        "buildings": { "dome": { "hp": 1200 } },
+        "bot": { "target_drones": 4, "first_wave_sec": 360, "wave_interval_sec": 240, "great_dome_from_sec": 1080, "economy_raid_sec": 120, "tech_attack_size": 5, "tech_window_sec": 180, "max_fighters": 10 },
+        "meteors": { "first_sec": 240, "interval_sec": 75, "warning_sec": 6, "damage": 35, "aim_at_buildings": 0.35 },
+        "solar_flare": { "first_sec": 420, "duration_sec": 20, "shelter_radius": 6, "damage_per_sec": 3 }
+      }
     }
   },
   "score": { "win": 1000, "killed_unit": 20, "population": 50, "green_sol": 5, "lost_colonist": -200 },

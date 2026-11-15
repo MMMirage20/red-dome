@@ -7,7 +7,7 @@
     раш       — турели у базы, армия ждёт дома и контратакует после отбитой волны;
     черепаха  — ракетные роверы осаждают турели, ледяные поля занимаются раньше;
     экономист — ранние набеги на буры и переработчики;
-    техно     — быстрая атака всем, что готово, пока реактор не окупился;
+    техно     — быстрая атака всем, что готово, пока реактор не окупился (bot.tech_window_sec);
 - с bot.great_dome_from_sec строит Большой купол (экономическая победа) и отправляет на него дронов.
 """
 
@@ -73,11 +73,18 @@ class BotAdaptive(BotStrategist):
                 self._try_build(sim, "turret", "base")
             if repelled:
                 self._launch(sim, self._ready_fighters(sim), min_size=2)
-        elif self.style == "tech":
-            self._launch(sim, self._ready_fighters(sim), min_size=3)
+        elif self.style == "tech" and self._reactor_is_new(sim):
+            self._launch(sim, self._ready_fighters(sim), min_size=self.spec(sim).tech_attack_size)
         elif self.style == "economy" and self.next_wave_ms is not None:
-            # Ранние набеги: таймер волны не дальше 20 с.
-            self.next_wave_ms = min(self.next_wave_ms, state.elapsed_ms + 20_000)
+            # Ранние набеги: таймер волны не дальше bot.economy_raid_sec.
+            raid_ms = round(self.spec(sim).economy_raid_sec * 1000)
+            self.next_wave_ms = min(self.next_wave_ms, state.elapsed_ms + raid_ms)
+
+    def _reactor_is_new(self, sim: Simulation) -> bool:
+        """Реактор соперника ещё «не окупился»: прошло меньше bot.tech_window_sec с тех пор, как бот его увидел.
+        Реактора не видели — тоже True: стиль «техно» угадан по ракетным роверам и стоит бить сразу."""
+        seen = self.memory.reactor_sec
+        return seen is None or sim.state.elapsed_ms / 1000 - seen < self.spec(sim).tech_window_sec
 
     def _base(self, sim: Simulation) -> tuple[int, int]:
         base = sim.state.map.bases[self.side]
@@ -87,11 +94,15 @@ class BotAdaptive(BotStrategist):
         return any(b.side == self.side and b.type == type_ and not b.complete for b in sim.state.buildings)
 
     def _launch(self, sim: Simulation, fighters: list, min_size: int) -> None:
+        """Внеочередная волна контрстратегии: не меньше min_size роверов и не больше обычной волны
+        (но хотя бы min_size) — остальные остаются охранять базу, как у «Стратега»."""
         if len(fighters) < min_size:
             return
         target = self.wave_target(sim)
         if target is None:
             return
+        size = max(min_size, self.spec(sim).wave_size(self.waves_sent))
+        fighters = sorted(fighters, key=lambda u: (-u.hp, u.id))[:size]
         sim.attack_move(self.side, [u.id for u in fighters], target)
         self.waves.append((sim.state.elapsed_ms, len(fighters)))
         self.waves_sent += 1

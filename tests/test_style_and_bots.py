@@ -95,7 +95,9 @@ def test_strategist_takes_center_field_after_its_time(balance: Balance) -> None:
     bot = BotStrategist("vector")
     sim.add_controller(bot)
     center = bot.ice_field(sim, "center")
-    sim.update(int(balance.bot.center_from_sec * 1000) - 1000)
+    # За игрока никто не играет: без запаса кислорода его колония задохнулась бы раньше, чем ВЕКТОР займёт центр.
+    sim.state.colonies["player"].resources["oxygen"] = 10_000
+    sim.update(int(sim.balance.side("vector").bot.center_from_sec * 1000) - 1000)
     assert bot.drills_by_field(sim)[1] == 0
     sim.update(90_000)
     tiles = set(center)

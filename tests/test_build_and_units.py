@@ -39,7 +39,7 @@ def test_building_costs_metal(balance: Balance) -> None:
     result = sim.build("player", "solar", spot.x, spot.y)
 
     assert result.ok
-    start_metal = balance.side("player").start.metal
+    start_metal = sim.balance.side("player").start.metal
     assert sim.state.colonies["player"].resources["metal"] == start_metal - balance.buildings["solar"].cost
     site = next(b for b in sim.state.buildings if b.type == "solar" and b.side == "player")
     assert not site.complete

@@ -7,7 +7,8 @@
 какого размера уходят волны, минимальное HP купола, металл к 180 с, роверы к первой волне
 противника, ангар, первый ровер, истощение полей. С --md — то же в Markdown для docs/balance:
     python -m tools.sim_cli --games 20 --seed 1 --report --md --difficulty normal --player bot
---player economy ставит за игрока «новичка без армии», --difficulty — уровень сложности ВЕКТОРа.
+--player economy ставит за игрока «новичка без армии», --difficulty — уровень сложности ВЕКТОРа,
+--mission — миссия кампании (1–3): у каждой свой бот ВЕКТОРа, цель и правки баланса.
 """
 
 from __future__ import annotations
@@ -22,10 +23,12 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from reddome.bot.bot_v0 import BUILD_ORDER, BotV0
+from reddome.bot.factory import make_bot
+from reddome.bot.strategist import BotStrategist
 from reddome.config.balance import Balance, BotSpec, load_balance
 from reddome.sim.economy import supply_cap, supply_used
 from reddome.sim.simulation import Simulation
-from reddome.sim.types import BUILDING_TYPES, DIFFICULTIES, RESOURCE_KEYS, SIDES, UNIT_TYPES, Side, opponent_of
+from reddome.sim.types import BUILDING_TYPES, DIFFICULTIES, MISSIONS, RESOURCE_KEYS, SIDES, UNIT_TYPES, Side, opponent_of
 
 #: Шаг прогона в отчёте: события получают время с точностью до секунды.
 REPORT_STEP_MS = 1000
@@ -46,6 +49,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="кто играет за игрока в отчёте: bot — бот v0, economy — без армии")
     parser.add_argument("--difficulty", choices=DIFFICULTIES, default=None,
                         help="сложность ВЕКТОРа: easy, normal, hard (по умолчанию — из balance.json)")
+    parser.add_argument("--mission", type=int, choices=MISSIONS, default=1,
+                        help="миссия для отчёта: 1 — «Новичок», 2 — «Стратег», 3 — «Адаптивный» (CSV — всегда миссия 1)")
     return parser.parse_args(argv)
 
 
@@ -66,9 +71,17 @@ class EconomyOnlyBot(BotV0):
 #: Кто играет за сторону игрока в отчёте: зеркальный бот или «новичок без армии».
 PLAYER_PROXIES: dict[str, type[BotV0]] = {"bot": BotV0, "economy": EconomyOnlyBot}
 PLAYER_PROXY_TITLES = {
-    "bot": "за игрока играет тот же бот «ВЕКТОР» v0 (с форой игрока, без множителей сложности)",
+    "bot": "за игрока играет бот (в миссии 1 — «ВЕКТОР» v0, в миссиях 2–3 — «Стратег») с форой игрока, без множителей сложности",
     "economy": "за игрока — «новичок без армии»: экономика по порядку стройки бота, без ангара, роверов и атак",
 }
+BOT_TITLES = {"novice": "бот v0 «Новичок»", "strategist": "бот «Стратег»", "adaptive": "бот «Адаптивный»"}
+
+
+def player_proxy(player: str, mission: int) -> BotV0:
+    """Заменитель игрока. «Стратег» умеет ледяные поля, реактор и ракетных роверов миссий 2–3."""
+    if player == "bot" and mission > 1:
+        return BotStrategist("player")
+    return PLAYER_PROXIES[player]("player")
 
 
 def new_game(balance: Balance, seed: int, params: dict[Side, BotSpec] | None = None) -> Simulation:
@@ -129,13 +142,16 @@ def _dome_hp(sim: Simulation, side: Side) -> float:
 
 
 def _rovers(sim: Simulation, side: Side) -> int:
-    return sum(1 for u in sim.state.units if u.side == side and u.type == "guard_rover" and u.hp > 0)
+    """Бойцы стороны: охранные и ракетные роверы."""
+    return sum(1 for u in sim.state.units if u.side == side and sim.is_fighter(u) and u.hp > 0)
 
 
-def play_report_game(balance: Balance, seed: int, sols: int, player: str = "bot") -> GameRecord:
-    """Одна партия с замерами для отчёта: ВЕКТОР — бот v0, игрок — см. PLAYER_PROXIES. Детерминирована по seed."""
-    sim = Simulation(balance, seed)
-    bots: dict[Side, BotV0] = {"player": PLAYER_PROXIES[player]("player"), "vector": BotV0("vector")}
+def play_report_game(balance: Balance, seed: int, sols: int, player: str = "bot", mission: int = 1) -> GameRecord:
+    """Одна партия с замерами для отчёта: ВЕКТОР — бот миссии, игрок — см. player_proxy. Детерминирована по seed."""
+    sim = Simulation(balance, seed, mission=mission)
+    vector = make_bot(sim.mission.bot, "vector")
+    assert isinstance(vector, BotV0)
+    bots: dict[Side, BotV0] = {"player": player_proxy(player, mission), "vector": vector}
     for bot in bots.values():
         sim.add_controller(bot)
     records = {side: SideRecord() for side in SIDES}
@@ -149,7 +165,8 @@ def play_report_game(balance: Balance, seed: int, sols: int, player: str = "bot"
             record = records[event.side]
             if event.kind == "construction_complete" and event.subject == "hangar" and record.hangar_sec is None:
                 record.hangar_sec = now
-            elif event.kind == "unit_trained" and event.subject == "guard_rover" and record.first_rover_sec is None:
+            elif (event.kind == "unit_trained" and event.subject in ("guard_rover", "rocket_rover")
+                  and record.first_rover_sec is None):
                 record.first_rover_sec = now
             elif event.kind == "deposit_depleted":
                 record.depleted_sec.append(now)
@@ -182,7 +199,7 @@ def describe(values: list[float], unit: str = " с") -> str:
 
 
 SIDE_TITLES: dict[Side, str] = {"player": "Игрок", "vector": "ВЕКТОР"}
-REASON_TITLES = {"dome_destroyed": "купол", "oxygen": "кислород"}
+REASON_TITLES = {"dome_destroyed": "купол", "oxygen": "кислород", "ice_held": "ледяные поля", "great_dome": "Большой купол"}
 WAVES_IN_SUMMARY = 3
 
 
@@ -243,13 +260,15 @@ def _md_table(header: list[str], rows: list[list[str]]) -> list[str]:
 
 def render_markdown(games: list[GameRecord], args: argparse.Namespace, balance: Balance) -> str:
     seeds = f"{games[0].seed}–{games[-1].seed}" if games else "—"
+    mission = getattr(args, "mission", 1)
     lines = [
         f"Команда: `python -m tools.sim_cli --games {args.games} --seed {args.seed} --sols {args.sols} "
-        f"--difficulty {balance.difficulty} --player {args.player} --report --md`",
+        f"--difficulty {balance.difficulty} --mission {mission} --player {args.player} --report --md`",
         "",
-        f"Сложность: {balance.difficulty}. "
+        f"Миссия {mission} «{balance.mission(mission).title}». Сложность: {balance.difficulty}. "
         f"Партий: {len(games)} (seed {seeds}), лимит {args.sols} солов ({args.sols * balance.sol_seconds:.0f} с). "
-        f"ВЕКТОР — бот v0, {PLAYER_PROXY_TITLES[args.player]}; это замена новичку, а не живой игрок. "
+        f"ВЕКТОР — {BOT_TITLES[balance.mission(mission).bot]}, {PLAYER_PROXY_TITLES[args.player]}; "
+        "это замена новичку, а не живой игрок. "
         "Время волн — момент отправки; «впервые стреляет» — когда армия дошла до противника. "
         "Значения: медиана (мин–макс), n — сколько раз случилось.",
         "",
@@ -264,8 +283,8 @@ def render_markdown(games: list[GameRecord], args: argparse.Namespace, balance: 
     return "\n".join(lines) + "\n"
 
 
-def render_text(games: list[GameRecord], balance: Balance) -> str:
-    lines = [f"Сложность: {balance.difficulty}, партий: {len(games)}"]
+def render_text(games: list[GameRecord], balance: Balance, mission: int = 1) -> str:
+    lines = [f"Миссия {mission} «{balance.mission(mission).title}», сложность: {balance.difficulty}, партий: {len(games)}"]
     for side in SIDES:
         lines.append(f"-- {SIDE_TITLES[side]}")
         lines += [f"  {name}: {value}" for name, value in summary_rows(games, side)]
@@ -275,8 +294,9 @@ def render_text(games: list[GameRecord], balance: Balance) -> str:
 
 
 def run_report(balance: Balance, args: argparse.Namespace) -> None:
-    games = [play_report_game(balance, args.seed + game_id, args.sols, args.player) for game_id in range(args.games)]
-    print(render_markdown(games, args, balance) if args.md else render_text(games, balance), end="")
+    mission = getattr(args, "mission", 1)
+    games = [play_report_game(balance, args.seed + game_id, args.sols, args.player, mission) for game_id in range(args.games)]
+    print(render_markdown(games, args, balance) if args.md else render_text(games, balance, mission), end="")
 
 
 def run_csv(balance: Balance, args: argparse.Namespace) -> None:

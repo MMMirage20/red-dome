@@ -70,10 +70,11 @@ def test_bot_sends_exactly_wave_size_and_keeps_the_rest_home(balance: Balance) -
     rovers = add_rovers(sim, "vector", 5)
     bot = BotV0("vector")
     sim.add_controller(bot)
-    first_wave_ms = int(balance.side("vector").bot.first_wave_sec * 1000)
+    # Числа партии — с правками миссии 1 (balance.json → missions.1.overrides).
+    first_wave_ms = int(sim.balance.side("vector").bot.first_wave_sec * 1000)
     sim.state.elapsed_ms = first_wave_ms - 1000
     sim.update(2000)
-    size = balance.side("vector").bot.wave_size(0)
+    size = sim.balance.side("vector").bot.wave_size(0)
     assert len(bot.waves) == 1 and bot.waves[0][1] == size
     home = [r for r in rovers if r.task == "idle"]
     assert len(home) == len(rovers) - size

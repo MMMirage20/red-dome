@@ -18,7 +18,7 @@ def test_dome_gives_energy_and_colonists_consume(balance: Balance) -> None:
     sim.update(sol_ms(balance))
 
     colony = sim.state.colonies["player"]
-    metal = balance.side("player").start.metal
+    metal = sim.balance.side("player").start.metal
     assert sim.state.sol == 1
     assert colony.resources == {"energy": 110, "water": 54, "oxygen": 54, "metal": metal}
     assert colony.last_delta == {"energy": 10, "water": -6, "oxygen": -6, "metal": 0}

@@ -137,8 +137,16 @@ class BotV0:
         drones = len(self._own_units(sim, "drone")) + self._queued(sim, "drone")
         if drones < self.spec(sim).target_drones:
             sim.train(self.side, "drone")
-        if self._queued_rovers(sim) < 2:
+        if self._queued_rovers(sim) < 2 and not self._army_full(sim):
             self.train_rover(sim)
+
+    def _army_full(self, sim: Simulation) -> bool:
+        """Бойцов (с очередью) уже bot.max_fighters — новых не собираем; 0 — предела нет."""
+        limit = self.spec(sim).max_fighters
+        if limit <= 0:
+            return False
+        fighters = sum(1 for u in sim.state.units if u.side == self.side and sim.is_fighter(u))
+        return fighters + self._queued_rovers(sim) >= limit
 
     def _queued_rovers(self, sim: Simulation) -> int:
         return self._queued(sim, "guard_rover")
