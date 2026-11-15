@@ -8,6 +8,10 @@ from typing import Literal
 Side = Literal["player", "vector"]
 SIDES: tuple[Side, ...] = ("player", "vector")
 
+#: Уровни сложности партии (этап 2). Множители каждого — в balance.json → difficulty.
+Difficulty = Literal["easy", "normal", "hard"]
+DIFFICULTIES: tuple[Difficulty, ...] = ("easy", "normal", "hard")
+
 ResourceKey = Literal["energy", "water", "oxygen", "metal"]
 RESOURCE_KEYS: tuple[ResourceKey, ...] = ("energy", "water", "oxygen", "metal")
 
@@ -188,6 +192,7 @@ class GameState:
     sol_elapsed_ms: int = 0
     next_id: int = 1
     outcome: Outcome | None = None
+    difficulty: Difficulty = "normal"
 
 
 @dataclass(frozen=True)

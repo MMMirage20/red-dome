@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 
 def create_colony(side: Side, balance: Balance) -> Colony:
-    start = balance.start
+    start = balance.side(side).start
     return Colony(
         side=side,
         resources={"energy": start.energy, "water": start.water, "oxygen": start.oxygen, "metal": start.metal},
@@ -136,7 +136,7 @@ def add_building(
     complete: bool = True,
 ) -> Building:
     """Добавляет здание. complete=False — стройплощадка с начальным здоровьем start_hp_ratio."""
-    max_hp = balance.buildings[type].hp
+    max_hp = balance.max_hp(side, type)
     building = Building(
         id=state.next_id,
         side=side,
@@ -173,6 +173,7 @@ def create_initial_state(balance: Balance, seed: int) -> GameState:
         seed=seed,
         map=game_map,
         colonies={side: create_colony(side, balance) for side in SIDES},
+        difficulty=balance.difficulty,
     )
     state.deposits = [
         Deposit(id=i + 1, tiles=list(tiles), amount=balance.deposit.ore_amount, initial=balance.deposit.ore_amount)
@@ -181,7 +182,7 @@ def create_initial_state(balance: Balance, seed: int) -> GameState:
     for side in SIDES:
         base = game_map.bases[side]
         add_building(state, balance, side, "dome", base)
-        for _ in range(balance.start.drones):
+        for _ in range(balance.side(side).start.drones):
             spot = find_free_tile_near(state, base)
             if spot is not None:
                 add_unit(state, balance, side, "drone", spot)

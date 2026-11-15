@@ -323,7 +323,7 @@ class BottomPanel:
     def _draw_building(self, surface: pygame.Surface, state: GameState, balance: Balance, b: Building) -> None:
         r = INFO_RECT
         spec = balance.buildings[b.type]
-        self._header(surface, b.type, BUILDING_NAMES[b.type], b.side, b.hp, spec.hp)
+        self._header(surface, b.type, BUILDING_NAMES[b.type], b.side, b.hp, balance.max_hp(b.side, b.type))
         if not b.complete:
             builders = sum(1 for u in state.units if u.task == "building" and u.target_id == b.id)
             theme.draw_text(surface, f"Строится: {round(b.build_progress * 100)} % · строят дронов: {builders}",

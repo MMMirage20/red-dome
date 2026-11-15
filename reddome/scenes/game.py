@@ -53,7 +53,7 @@ NO_ROVERS = "Роверов нет — соберите в ангаре"
 class GameScene(Scene):
     def enter(self, seed: int | None = None, autoplay: bool = False, **data: Any) -> None:
         seed = self.app.seed if seed is None else seed
-        self.sim = Simulation(self.app.balance, seed)
+        self.sim = Simulation(self.app.balance, seed, self.app.difficulty)
         self.bot: Bot = BotV0("vector")
         self.sim.add_controller(self.bot)
         if autoplay:
@@ -207,7 +207,7 @@ class GameScene(Scene):
             elif self.menu:
                 self.menu = ""
             else:
-                self.app.push("pause", background=self.app.snapshot())
+                self.app.push("pause", background=self.app.snapshot(), difficulty=self.sim.state.difficulty)
             return
         if self.app.debug and key == pygame.K_k:
             self._debug_destroy_dome("vector")
@@ -406,7 +406,7 @@ class GameScene(Scene):
             others = [i for i in everyone if i not in drones]
             if not target.complete:
                 self._report(self.sim.help_build("player", drones, target.id), tile, "build")
-            elif target.hp < self.sim.balance.buildings[target.type].hp:
+            elif target.hp < self.sim.balance.max_hp(target.side, target.type):
                 self._report(self.sim.repair("player", drones, target.id), tile, "build")
             elif target.type in DROPOFF_TYPES and any(u.carry > 0 for u in self.own_units() if u.id in drones):
                 self._report(self.sim.return_home("player", drones), tile, "gather")
@@ -599,7 +599,7 @@ class GameScene(Scene):
         return "дрон в очереди" if unit_type == "drone" else "ровер в очереди"
 
     def _gesture_pause(self) -> str | None:
-        self.app.push("pause", background=self.app.snapshot())
+        self.app.push("pause", background=self.app.snapshot(), difficulty=self.sim.state.difficulty)
         return None
 
     def _debug_destroy_dome(self, side: Side) -> None:
@@ -637,7 +637,7 @@ class GameScene(Scene):
             self.end_ms += dt_ms
             if self.end_ms >= END_DELAY_MS:
                 self.app.start("result", outcome=state.outcome, sol=state.sol, elapsed_ms=state.elapsed_ms,
-                               stats=state.stats, background=self.app.snapshot())
+                               stats=state.stats, difficulty=state.difficulty, background=self.app.snapshot())
 
     def _cursor_kind(self) -> str:
         if self.targeting == "attack":

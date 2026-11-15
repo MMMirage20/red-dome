@@ -14,6 +14,7 @@ from reddome.sim.types import (
     SIDES,
     BuildingType,
     CommandResult,
+    Difficulty,
     Point,
     SimEvent,
     Side,
@@ -38,11 +39,15 @@ class Controller(Protocol):
 
 
 class Simulation:
-    """Время копится и обрабатывается фиксированными шагами, поэтому партия детерминирована."""
+    """Время копится и обрабатывается фиксированными шагами, поэтому партия детерминирована.
 
-    def __init__(self, balance: Balance, seed: int) -> None:
-        self.balance = balance
-        self.state = create_initial_state(balance, seed)
+    Партию задают seed (карта) и сложность: одинаковые seed, сложность и команды дают одинаковую партию.
+    Без difficulty берётся сложность, на которой загружен balance.
+    """
+
+    def __init__(self, balance: Balance, seed: int, difficulty: Difficulty | None = None) -> None:
+        self.balance = balance if difficulty is None else balance.with_difficulty(difficulty)
+        self.state = create_initial_state(self.balance, seed)
         self.controllers: list[Controller] = []
         #: События для эффектов и отчётов; забираются через drain_events() и на логику не влияют.
         self.events: list[SimEvent] = []

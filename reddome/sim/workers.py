@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 from reddome.sim.state import (
@@ -164,6 +165,8 @@ def deliver(state: GameState, balance: Balance, unit: Unit, building: Building, 
     amount = unit.carry
     if building.type == "regolith" and building.powered:
         amount = int(unit.carry * (1 + balance.workers.refinery_bonus))
+    # Доход стороны от сложности (у ВЕКТОРа на «Лёгком» меньше, на «Сложном» больше); у «Обычного» — 1.0.
+    amount = math.floor(amount * balance.side(unit.side).income_ratio + 0.5)
     state.colonies[unit.side].resources["metal"] += amount
     state.stats[unit.side].metal_mined += amount
     unit.carry = 0
@@ -198,7 +201,7 @@ def _step_gathering(state: GameState, balance: Balance, unit: Unit, dt_ms: int, 
 
 
 def _step_repair(state: GameState, balance: Balance, unit: Unit, building: Building, dt_ms: int) -> None:
-    max_hp = balance.buildings[building.type].hp
+    max_hp = balance.max_hp(building.side, building.type)
     hp_per_metal = 100 / balance.workers.repair_metal_per_100_hp
     gain = min(balance.workers.repair_hp_per_sec * dt_ms / 1000, max_hp - building.hp)
     building.hp += gain

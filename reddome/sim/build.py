@@ -109,7 +109,8 @@ def construction_step(state: GameState, balance: Balance, dt_ms: int, events: li
         spec = balance.buildings[site.type]
         step = min(builders * dt_ms / (spec.build_time_sec * 1000), 1.0 - site.build_progress)
         site.build_progress += step
-        site.hp = min(float(spec.hp), site.hp + spec.hp * (1 - balance.construction.start_hp_ratio) * step)
+        max_hp = balance.max_hp(site.side, site.type)
+        site.hp = min(float(max_hp), site.hp + max_hp * (1 - balance.construction.start_hp_ratio) * step)
         if site.build_progress >= 1.0 - 1e-9:
             site.build_progress = 1.0
             site.complete = True

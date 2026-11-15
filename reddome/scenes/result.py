@@ -13,6 +13,7 @@ from reddome.render.draw import glow
 from reddome.scenes.base import Scene
 from reddome.sim.types import Outcome, SideStats
 from reddome.ui import theme
+from reddome.ui.commands import difficulty_line
 from reddome.ui.widgets import Button, card
 
 REASONS = {
@@ -25,8 +26,9 @@ class ResultScene(Scene):
     opaque = True
 
     def enter(self, outcome: Outcome, sol: int = 0, elapsed_ms: int = 0, stats: dict[str, SideStats] | None = None,
-              background: pygame.Surface | None = None, **data: Any) -> None:
+              background: pygame.Surface | None = None, difficulty: str | None = None, **data: Any) -> None:
         self.background = background
+        self.difficulty_text = difficulty_line(difficulty or self.app.difficulty)
         self.won = outcome.winner == "player"
         win_text, loss_text = REASONS[outcome.reason]
         self.reason = win_text if self.won else loss_text
@@ -64,6 +66,7 @@ class ResultScene(Scene):
         surface.blit(self.halo, self.halo.get_rect(center=(r.centerx, r.y + 70)), special_flags=pygame.BLEND_ADD)
         theme.draw_text(surface, title, (r.centerx, r.y + 70), 64, color, anchor="center", kind="title", shadow=True)
         theme.draw_text(surface, self.reason, (r.centerx, r.y + 128), 22, theme.TEXT, anchor="center")
+        theme.draw_text(surface, self.difficulty_text, (r.right - 24, r.y + 20), 15, theme.TEXT_QUIET, anchor="topright")
         for i, (label, value) in enumerate(self.tiles):
             col, row = i % 3, i // 3
             tile = pygame.Rect(r.x + 30 + col * 224, r.y + 170 + row * 124, 208, 108)

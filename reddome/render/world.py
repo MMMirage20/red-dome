@@ -162,8 +162,8 @@ class WorldRenderer:
             top = y - cy - (40 if b.type == "dome" else 24)
             if not b.complete:
                 draw_bar(surface, x - cx, top, 34, b.build_progress, theme.ACCENT)
-            elif b.id in selected or b.hp < balance.buildings[b.type].hp - HP_EPSILON:
-                draw_bar(surface, x - cx, top, 34, b.hp / balance.buildings[b.type].hp)
+            elif b.id in selected or b.hp < balance.max_hp(b.side, b.type) - HP_EPSILON:
+                draw_bar(surface, x - cx, top, 34, b.hp / balance.max_hp(b.side, b.type))
         for u in state.units:
             if u.id in selected or u.hp < balance.units[u.type].hp - HP_EPSILON:
                 x, y = tile_center(u.x, u.y)
