@@ -14,7 +14,8 @@ AFTER_FIRST_WAVE_SEC = 90
 
 def short_sols(balance: Balance) -> int:
     """Солов ровно столько, чтобы ВЕКТОР успел отправить первую волну."""
-    return math.ceil((balance.bot.first_wave_sec + AFTER_FIRST_WAVE_SEC) / balance.sol_seconds)
+    first_wave_sec = balance.for_mission(1).side("vector").bot.first_wave_sec
+    return math.ceil((first_wave_sec + AFTER_FIRST_WAVE_SEC) / balance.sol_seconds)
 
 
 def test_report_records_first_wave_and_checkpoint(balance: Balance) -> None:
@@ -22,8 +23,9 @@ def test_report_records_first_wave_and_checkpoint(balance: Balance) -> None:
     vector = game.sides["vector"]
     assert vector.waves, "ВЕКТОР должен успеть отправить первую волну"
     first_sec, first_size = vector.waves[0]
-    assert first_sec >= balance.bot.first_wave_sec
-    assert first_size == balance.bot.wave_size(0)
+    bot = balance.for_mission(1).side("vector").bot
+    assert first_sec >= bot.first_wave_sec
+    assert first_size == bot.wave_size(0)
     player = game.sides["player"]
     assert player.rovers_at_enemy_first_wave is not None
     assert player.metal_mined_at_checkpoint > 0

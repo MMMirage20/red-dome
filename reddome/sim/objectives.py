@@ -2,6 +2,7 @@
 
 Поле держит сторона, у которой на нём есть готовый бур, а у соперника нет. В конце каждого сола
 счётчик ice_hold_sols стороны растёт, если она держит не меньше hold_fields полей, иначе сбрасывается.
+Побеждает сторона, чей счётчик дошёл до её порога: hold_sols у игрока, vector_hold_sols у ВЕКТОРа.
 """
 
 from __future__ import annotations
@@ -61,7 +62,7 @@ def mission_winner(state: GameState, balance: Balance) -> tuple[Side, OutcomeRea
     """Победа по цели миссии (а не по разрушенному куполу): (сторона, причина)."""
     mission = balance.mission(state.mission)
     for side in SIDES:
-        if mission.goal == "hold_ice" and state.ice_hold_sols[side] >= mission.hold_sols:
+        if mission.goal == "hold_ice" and state.ice_hold_sols[side] >= mission.hold_sols_for(side):
             return side, "ice_held"
         if mission.goal == "great_dome" and any(
             b.side == side and b.type == "great_dome" and b.complete and b.hp > 0 for b in state.buildings

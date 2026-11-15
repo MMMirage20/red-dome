@@ -49,7 +49,9 @@ class Simulation:
     """
 
     def __init__(self, balance: Balance, seed: int, difficulty: Difficulty | None = None, mission: int = 1) -> None:
-        self.balance = balance if difficulty is None else balance.with_difficulty(difficulty)
+        base = balance if difficulty is None else balance.with_difficulty(difficulty)
+        #: Числа партии: общий баланс с правками миссии (balance.json → missions.N.overrides).
+        self.balance = base.for_mission(mission)
         #: Состав миссии (этап 3): разрешённые здания и юниты, цель, события.
         self.mission = self.balance.mission(mission)
         self.state = create_initial_state(self.balance, seed, mission)

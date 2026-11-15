@@ -84,7 +84,7 @@ def test_missing_level_is_reported() -> None:
 
 def test_simulation_takes_difficulty_next_to_seed(balance: Balance) -> None:
     sim = Simulation(balance, seed=1, difficulty="easy")
-    easy = balance.with_difficulty("easy")
+    easy = balance.with_difficulty("easy").for_mission(1)
     assert sim.state.difficulty == "easy"
     assert sim.balance.difficulty == "easy"
     assert sim.state.colonies["vector"].resources["metal"] == easy.side("vector").start.metal

@@ -29,11 +29,12 @@ def objective_lines(state: GameState, mission: MissionSpec) -> list[tuple[str, C
     if mission.goal == "hold_ice":
         total = len(state.map.ice_fields)
         mine, theirs = fields_held(state, "player"), fields_held(state, "vector")
+        need, vector_need = mission.hold_sols_for("player"), mission.hold_sols_for("vector")
         lines: list[tuple[str, Color]] = [
-            (f"Цель: удержать {mission.hold_fields} из {total} ледяных полей {mission.hold_sols} солов", theme.TEXT),
-            (f"Ваши поля: {mine} · удержание {state.ice_hold_sols['player']}/{mission.hold_sols}",
+            (f"Цель: удержать {mission.hold_fields} из {total} ледяных полей {need} солов подряд", theme.TEXT),
+            (f"Ваши поля: {mine} · удержание {state.ice_hold_sols['player']}/{need}",
              theme.SUCCESS if mine >= mission.hold_fields else theme.TEXT_QUIET),
-            (f"Поля ВЕКТОРа: {theirs} · удержание {state.ice_hold_sols['vector']}/{mission.hold_sols}",
+            (f"Поля ВЕКТОРа: {theirs} · удержание {state.ice_hold_sols['vector']}/{vector_need}",
              theme.ALARM if theirs >= mission.hold_fields else theme.TEXT_QUIET),
         ]
         return lines
@@ -68,7 +69,9 @@ def hazard_banner(state: GameState, balance: Balance, mission: MissionSpec) -> t
     return None
 
 
-def draw_objective(surface: pygame.Surface, state: GameState, balance: Balance, mission: MissionSpec) -> None:
+def draw_objective(surface: pygame.Surface, state: GameState, balance: Balance,
+                   mission: MissionSpec) -> tuple[pygame.Rect, pygame.Rect | None]:
+    """Рисует карточку цели и баннер события; возвращает их прямоугольники (баннер — None, если его нет)."""
     lines = objective_lines(state, mission)
     rendered = [theme.render_text(text, 15 if i else 16, color, "title" if i == 0 else "body")
                 for i, (text, color) in enumerate(lines)]
@@ -81,14 +84,18 @@ def draw_objective(surface: pygame.Surface, state: GameState, balance: Balance, 
     for r in rendered:
         box.blit(r, (12, y))
         y += r.get_height() + 3
-    surface.blit(box, (10, HUD_HEIGHT + 8))
+    card = surface.blit(box, (10, HUD_HEIGHT + 8))
 
     banner = hazard_banner(state, balance, mission)
     if banner is None:
-        return
+        return card, None
     text, color = banner
     label = theme.render_text(text, 17, color, "title")
     rect = label.get_rect(midtop=(theme.SCREEN_SIZE[0] // 2, HUD_HEIGHT + 52))
+    if rect.inflate(24, 10).colliderect(card):
+        # Карточка цели миссий 2–3 широкая: баннер — под ней, а не поверх строк цели.
+        rect.top = card.bottom + 12
     pygame.draw.rect(surface, (30, 14, 8), rect.inflate(24, 10), border_radius=8)
     pygame.draw.rect(surface, color, rect.inflate(24, 10), 1, border_radius=8)
     surface.blit(label, rect)
+    return card, rect.inflate(24, 10)

@@ -204,7 +204,11 @@ def test_meteor_is_marked_then_hits(balance: Balance) -> None:
 def test_meteors_are_deterministic(balance: Balance) -> None:
     def spots(seed: int) -> list[tuple[int, int]]:
         sim = Simulation(balance, seed=seed, mission=3)
-        events = run_until(sim, lambda _: sim.state.meteors_spawned >= 3, max_ms=400_000)
+        # Без ботов колонии задохнулись бы раньше третьего метеорита — даём запас кислорода.
+        for colony in sim.state.colonies.values():
+            colony.resources["oxygen"] = 10_000
+        impact_ms = round((sim.balance.meteors.first_sec + 2 * sim.balance.meteors.interval_sec) * 1000)
+        events = run_until(sim, lambda _: sim.state.meteors_spawned >= 3, max_ms=impact_ms + 10_000)
         return [(round(e.x), round(e.y)) for e in events if e.kind == "meteor_warning"]
 
     assert spots(7) == spots(7)

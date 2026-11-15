@@ -138,6 +138,16 @@ class BotSpec:
     #: «Адаптивный»: с какой секунды классифицировать стиль соперника и когда строить Большой купол.
     classify_from_sec: float = 180
     great_dome_from_sec: float = 600
+    #: «Адаптивный» против «экономиста»: набег не чаще, чем раз в столько секунд.
+    economy_raid_sec: float = 20
+    #: «Адаптивный» против «техно»: атака всеми готовыми роверами, когда их не меньше стольких.
+    tech_attack_size: int = 3
+    #: «Адаптивный» против «техно»: сколько секунд после появления реактора соперника длятся эти атаки
+    #: («пока реактор не окупился», устав, раздел 4); потом — обычные волны.
+    tech_window_sec: float = 240
+    #: Больше стольких бойцов (своих и в очереди) бот не собирает; 0 — без предела.
+    #: Иначе к середине партии у его купола стоят десятки роверов и разрушить его невозможно.
+    max_fighters: int = 0
     #: Множитель размера волн от сложности. В balance.json его нет: считается при загрузке.
     wave_size_ratio: float = 1.0
 
@@ -230,6 +240,8 @@ class MissionSpec:
     #: Миссия 2: сколько ледяных полей держать и сколько солов подряд.
     hold_fields: int = 0
     hold_sols: int = 0
+    #: Миссия 2: сколько солов подряд держать поля ВЕКТОРу; None — столько же, сколько игроку.
+    vector_hold_sols: int | None = None
 
     def allows_building(self, type: str) -> bool:
         return type == "dome" or type in self.buildings
@@ -239,6 +251,12 @@ class MissionSpec:
 
     def has_event(self, kind: str) -> bool:
         return kind in self.events
+
+    def hold_sols_for(self, side: Side) -> int:
+        """Сколько солов подряд стороне держать ледяные поля для победы (миссия 2)."""
+        if side == "vector" and self.vector_hold_sols is not None:
+            return self.vector_hold_sols
+        return self.hold_sols
 
 
 def _mission_from_dict(number: int, raw: dict[str, Any]) -> MissionSpec:
@@ -253,6 +271,7 @@ def _mission_from_dict(number: int, raw: dict[str, Any]) -> MissionSpec:
         ore_amount=raw.get("ore_amount"),
         hold_fields=raw.get("hold_fields", 0),
         hold_sols=raw.get("hold_sols", 0),
+        vector_hold_sols=raw.get("vector_hold_sols"),
     )
     where = f"balance.json: missions.{number}"
     unknown = [b for b in spec.buildings if b not in BUILDING_TYPES or b == "dome"]
@@ -266,6 +285,8 @@ def _mission_from_dict(number: int, raw: dict[str, Any]) -> MissionSpec:
         raise ValueError(f"{where}: goal должен быть одним из {list(GOALS)}")
     if spec.goal == "hold_ice" and (spec.hold_fields < 1 or spec.hold_sols < 1):
         raise ValueError(f"{where}: для цели hold_ice нужны hold_fields и hold_sols")
+    if spec.vector_hold_sols is not None and spec.vector_hold_sols < 1:
+        raise ValueError(f"{where}: vector_hold_sols должен быть не меньше 1")
     if spec.goal == "great_dome" and "great_dome" not in spec.buildings:
         raise ValueError(f"{where}: для цели great_dome Большой купол должен быть в buildings")
     return spec
@@ -385,12 +406,49 @@ class Balance:
             return self
         return balance_from_dict(self.raw, difficulty)
 
+    def for_mission(self, number: int) -> Balance:
+        """Баланс партии миссии: общие числа с правками missions.N.overrides на той же сложности.
+
+        Правки — абсолютные значения, поэтому повторный вызов ничего не меняет. Без правок — тот же объект.
+        """
+        self.mission(number)
+        overrides = self.raw.get("missions", {}).get(str(number), {}).get("overrides")
+        if not overrides:
+            return self
+        return balance_from_dict(merge_overrides(self.raw, overrides), self.difficulty)
+
+
+#: Разделы balance.json, которые миссия не может переопределить: сами миссии и уровни сложности.
+NOT_OVERRIDABLE = ("missions", "difficulty")
+
+
+def merge_overrides(raw: dict[str, Any], overrides: dict[str, Any], where: str = "overrides") -> dict[str, Any]:
+    """Копия raw, в которой значения из overrides заменены по тем же путям (раздел → ключ → …).
+
+    Новых ключей overrides не добавляет: опечатка в названии сразу даёт понятную ошибку.
+    """
+    merged = dict(raw)
+    for key, value in overrides.items():
+        path = f"{where}.{key}"
+        if where == "overrides" and key in NOT_OVERRIDABLE:
+            raise ValueError(f"balance.json: раздел {key} нельзя переопределить в миссии ({path})")
+        if key not in raw:
+            raise ValueError(f"balance.json: {path} — такого ключа нет в общем балансе")
+        if isinstance(value, dict):
+            if not isinstance(raw[key], dict):
+                raise ValueError(f"balance.json: {path} — в общем балансе это число, а не раздел")
+            merged[key] = merge_overrides(raw[key], value, path)
+        else:
+            merged[key] = value
+    return merged
+
 
 def side_specs(start: StartSpec, vector_dome_hp: int, bot: BotSpec, player: PlayerSpec, level: DifficultySpec) -> dict[Side, SideSpec]:
     """Единственное место, где множители сложности превращаются в числа партии.
 
     Сложность меняет только ВЕКТОРа и купол игрока. Сторона игрока остаётся с базовыми числами бота:
-    в sim_cli за неё тоже играет бот, и сравнение уровней не должно его менять.
+    в sim_cli за неё тоже играет бот, и сравнение уровней не должно его менять. Предел армии max_fighters —
+    только у ВЕКТОРа.
     """
     vector_start = replace(
         start,
@@ -406,6 +464,8 @@ def side_specs(start: StartSpec, vector_dome_hp: int, bot: BotSpec, player: Play
         center_from_sec=bot.center_from_sec * level.bot_timing,
         enemy_field_from_sec=bot.enemy_field_from_sec * level.bot_timing,
         great_dome_from_sec=bot.great_dome_from_sec * level.bot_timing,
+        economy_raid_sec=bot.economy_raid_sec * level.bot_timing,
+        max_fighters=_scaled(bot.max_fighters, level.bot_waves),
         wave_size_ratio=level.bot_waves,
     )
     return {
@@ -413,7 +473,8 @@ def side_specs(start: StartSpec, vector_dome_hp: int, bot: BotSpec, player: Play
             start=replace(start, metal=player.start_metal),
             dome_hp=_scaled(player.dome_hp, level.player_dome_hp),
             income_ratio=1.0,
-            bot=bot,
+            # Предел армии — фора игроку: бот за игрока (sim_cli, автоигра) им не ограничен.
+            bot=replace(bot, max_fighters=0),
         ),
         "vector": SideSpec(start=vector_start, dome_hp=vector_dome_hp, income_ratio=level.bot_resources, bot=vector_bot),
     }
@@ -443,7 +504,10 @@ def balance_from_dict(raw: dict[str, Any], difficulty: str | None = None) -> Bal
     if set(raw["missions"]) != {str(n) for n in MISSIONS}:
         raise ValueError(f"balance.json: в разделе missions ожидаются ключи {[str(n) for n in MISSIONS]}")
     missions = {n: _mission_from_dict(n, raw["missions"][str(n)]) for n in MISSIONS}
-    units = {name: UnitSpec(**spec) for name, spec in raw["units"].items()}
+    for n in MISSIONS:
+        # Опечатка в правках миссии видна сразу при загрузке, а не когда миссию запустят.
+        merge_overrides(raw, raw["missions"][str(n)].get("overrides") or {})
+    units ={name: UnitSpec(**spec) for name, spec in raw["units"].items()}
     for name, unit in units.items():
         if unit.requires is not None and unit.requires not in BUILDING_TYPES:
             raise ValueError(f"balance.json: units.{name}.requires — неизвестное здание {unit.requires!r}")

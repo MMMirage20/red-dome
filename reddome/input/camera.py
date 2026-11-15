@@ -17,6 +17,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from reddome.input.gestures import STATUS_TEXT, GestureFrame, Hand, SourceResult, SourceStatus
+from reddome.input.model_download import ModelDownloadError, download_gesture_model, find_gesture_model
 
 if TYPE_CHECKING:
     from reddome.config.camera import CameraSettings
@@ -113,9 +114,15 @@ class MediaPipeGestureSource:
         except ImportError as error:
             self._set_status("no_mediapipe", str(error.name or ""))
             return
-        if not self.settings.model_path.exists():
-            self._set_status("no_model")
-            return
+        model_path = find_gesture_model(self.settings.model_path)
+        if model_path is None:
+            # Первый запуск сборки: модели в архиве нет, качаем её в папку пользователя (input/model_download.py).
+            self._set_status("starting", "качаю модель жестов (8 МБ) с сервера Google")
+            try:
+                model_path = download_gesture_model()
+            except ModelDownloadError as error:
+                self._set_status("no_model", str(error)[:160])
+                return
         attempt = 0
         while not self._stop.is_set():
             attempt += 1
@@ -127,7 +134,7 @@ class MediaPipeGestureSource:
             recognizer: Any = None
             try:
                 options = vision.GestureRecognizerOptions(
-                    base_options=BaseOptions(model_asset_path=str(self.settings.model_path)),
+                    base_options=BaseOptions(model_asset_path=str(model_path)),
                     running_mode=vision.RunningMode.VIDEO,
                     num_hands=2,
                 )

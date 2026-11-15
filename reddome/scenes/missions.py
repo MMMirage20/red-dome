@@ -38,7 +38,7 @@ class Mission:
 #: Кампания из устава (docs/charter.md, раздел 5). Числа целей — в balance.json → missions.
 MISSIONS: tuple[Mission, ...] = (
     Mission(1, "Высадка", "Построить базу и разрушить купол ВЕКТОРа", "dome", True, "Пылевой вихрь"),
-    Mission(2, "Война за лёд", "Удержать 2 из 3 ледяных полей 10 солов", "ice_drill", False,
+    Mission(2, "Война за лёд", "Удержать {fields} из 3 ледяных полей {sols} солов подряд", "ice_drill", False,
             "Турель, реактор, ракетный ровер · буря"),
     Mission(3, "Последний купол", "Разрушить купол ВЕКТОРа или первым построить Большой купол", "great_dome", False,
             "Большой купол · метеориты · вспышки"),
@@ -79,6 +79,11 @@ class MissionsScene(Scene):
                                         width=320, height=44)
         self.buttons.append(self.difficulty_button)
         self.buttons.append(Button((w // 2, 668), "Назад в меню", lambda: self.app.start("menu"), width=260))
+
+    def goal_text(self, mission: Mission) -> str:
+        """Цель на карточке: числа (сколько полей и солов) — из balance.json → missions."""
+        spec = self.app.balance.mission(mission.number)
+        return mission.goal.format(fields=spec.hold_fields, sols=spec.hold_sols_for("player"))
 
     def unlocked(self, number: int) -> bool:
         profile = getattr(self.app, "profile", None)
@@ -145,7 +150,7 @@ class MissionsScene(Scene):
                             anchor="center")
             theme.draw_text(surface, f"«{mission.title}»", (rect.centerx, rect.y + 182), 28, color, anchor="center",
                             kind="title")
-            self._wrap(surface, mission.goal, rect.centerx, rect.y + 218, rect.width - 40, 15, theme.TEXT_QUIET)
+            self._wrap(surface, self.goal_text(mission), rect.centerx, rect.y + 218, rect.width - 40, 15, theme.TEXT_QUIET)
             bot = self.app.balance.mission(mission.number).bot
             theme.draw_text(surface, f"ВЕКТОР: «{BOT_TITLES[bot]}»", (rect.centerx, rect.y + 268), 15, theme.ACCENT,
                             anchor="center")

@@ -215,7 +215,7 @@ STATUS_TEXT: dict[str, str] = {
     "running": "камера работает",
     "no_camera": "камера не открылась",
     "no_mediapipe": "не установлен mediapipe или OpenCV (requirements-ai.txt)",
-    "no_model": "нет файла models/gesture_recognizer.task",
+    "no_model": "нет модели жестов (models/gesture_recognizer.task), скачать не удалось",
     "error": "ошибка распознавания",
 }
 
