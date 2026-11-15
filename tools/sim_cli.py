@@ -15,13 +15,14 @@ from __future__ import annotations
 import argparse
 import csv
 import io
+import random
 import statistics
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from reddome.bot.bot_v0 import BUILD_ORDER, BotV0
-from reddome.config.balance import Balance, load_balance
+from reddome.config.balance import Balance, BotSpec, load_balance
 from reddome.sim.economy import supply_cap, supply_used
 from reddome.sim.simulation import Simulation
 from reddome.sim.types import BUILDING_TYPES, DIFFICULTIES, RESOURCE_KEYS, SIDES, UNIT_TYPES, Side, opponent_of
@@ -37,6 +38,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=1, help="seed первой партии, дальше seed + номер")
     parser.add_argument("--sols", type=int, default=60, help="максимум солов в партии")
     parser.add_argument("--out", type=Path, default=Path("ml/data/games_v0.csv"), help="куда записать CSV")
+    parser.add_argument("--jitter", type=float, default=0.15,
+                        help="разброс чисел ботов в датасете: 0.15 — ±15 %% к таймингам волн, ±1 дрон; 0 — без разброса")
     parser.add_argument("--report", action="store_true", help="напечатать отчёт баланса вместо CSV")
     parser.add_argument("--md", action="store_true", help="отчёт в Markdown (для docs/balance)")
     parser.add_argument("--player", choices=sorted(PLAYER_PROXIES), default="bot",
@@ -68,11 +71,28 @@ PLAYER_PROXY_TITLES = {
 }
 
 
-def new_game(balance: Balance, seed: int) -> Simulation:
+def new_game(balance: Balance, seed: int, params: dict[Side, BotSpec] | None = None) -> Simulation:
     sim = Simulation(balance, seed)
     for side in SIDES:
-        sim.add_controller(BotV0(side))
+        sim.add_controller(BotV0(side, (params or {}).get(side)))
     return sim
+
+
+def jittered_bot(spec: BotSpec, rng: random.Random, jitter: float) -> BotSpec:
+    """Слегка случайные числа бота для датасета (ФТ-17): тайминги волн ±jitter, целевое число дронов ±1.
+    Случайность — от seed партии, поэтому датасет повторяется."""
+    if jitter <= 0:
+        return spec
+
+    def scale(value: float) -> float:
+        return round(value * rng.uniform(1 - jitter, 1 + jitter), 1)
+
+    return replace(
+        spec,
+        target_drones=max(3, spec.target_drones + rng.choice((-1, 0, 1))),
+        first_wave_sec=scale(spec.first_wave_sec),
+        wave_interval_sec=scale(spec.wave_interval_sec),
+    )
 
 
 @dataclass
@@ -272,6 +292,10 @@ def run_csv(balance: Balance, args: argparse.Namespace) -> None:
         "metal_mined",
         *(f"n_{t}" for t in BUILDING_TYPES),
         *(f"n_{t}" for t in UNIT_TYPES),
+        "green_sols",
+        "bot_target_drones",
+        "bot_first_wave_sec",
+        "bot_wave_interval_sec",
         "winner",
     ]
     rows_written = 0
@@ -281,7 +305,9 @@ def run_csv(balance: Balance, args: argparse.Namespace) -> None:
         writer.writerow(header)
         for game_id in range(args.games):
             seed = args.seed + game_id
-            sim = new_game(balance, seed)
+            rng = random.Random(f"bots:{seed}")
+            params = {side: jittered_bot(balance.side(side).bot, rng, args.jitter) for side in SIDES}
+            sim = new_game(balance, seed, params)
             rows: list[list[object]] = []
             for _ in range(args.sols):
                 if sim.state.outcome is not None:
@@ -304,6 +330,10 @@ def run_csv(balance: Balance, args: argparse.Namespace) -> None:
                             state.stats[side].metal_mined,
                             *(sum(b.side == side and b.type == t for b in state.buildings) for t in BUILDING_TYPES),
                             *(sum(u.side == side and u.type == t for u in state.units) for t in UNIT_TYPES),
+                            colony.green_sols,
+                            params[side].target_drones,
+                            params[side].first_wave_sec,
+                            params[side].wave_interval_sec,
                         ]
                     )
             winner = sim.state.outcome.winner if sim.state.outcome else ""

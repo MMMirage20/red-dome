@@ -17,6 +17,7 @@ from reddome.scenes.base import Scene
 from reddome.scenes.boot import BootScene
 from reddome.scenes.game import GameScene
 from reddome.scenes.menu import MenuScene
+from reddome.scenes.missions import MissionsScene
 from reddome.scenes.pause import PauseScene
 from reddome.scenes.result import ResultScene
 from reddome.scenes.shop import ShopScene
@@ -29,6 +30,7 @@ from reddome.ui.gesture_hud import draw_overlay
 SCENES: dict[str, type[Scene]] = {
     "boot": BootScene,
     "menu": MenuScene,
+    "missions": MissionsScene,
     "game": GameScene,
     "pause": PauseScene,
     "result": ResultScene,

@@ -128,6 +128,11 @@ def main(argv: list[str] | None = None) -> None:
     frames(app, 30)
     save(app, args.out, "02_menu")
 
+    app.start("missions")
+    MOUSE[0] = (270, 515)  # наведение на «Начать»
+    frames(app, 10)
+    save(app, args.out, "13_missions")
+
     app.start("game", autoplay=True)
     frames(app, 2)
     scene = game_scene(app)

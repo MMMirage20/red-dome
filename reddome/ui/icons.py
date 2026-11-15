@@ -168,6 +168,18 @@ def _move(s: pygame.Surface, n: float) -> None:
     pygame.draw.polygon(s, theme.SUCCESS, [(0.86 * n, 0.14 * n), (0.48 * n, 0.24 * n), (0.76 * n, 0.52 * n)])
 
 
+def _lock(s: pygame.Surface, n: float) -> None:
+    """Замок закрытой миссии: дужка и корпус с замочной скважиной."""
+    pygame.draw.arc(s, theme.TEXT_QUIET, pygame.Rect(0.28 * n, 0.1 * n, 0.44 * n, 0.5 * n), 0, math.pi, _w(n, 0.09))
+    for x in (0.3, 0.7):
+        pygame.draw.line(s, theme.TEXT_QUIET, (x * n, 0.35 * n), (x * n, 0.48 * n), _w(n, 0.09))
+    body = pygame.Rect(0.18 * n, 0.44 * n, 0.64 * n, 0.48 * n)
+    pygame.draw.rect(s, theme.SAND, body, border_radius=int(0.08 * n))
+    pygame.draw.rect(s, theme.PANEL_EDGE, body, _w(n, 0.04), border_radius=int(0.08 * n))
+    pygame.draw.circle(s, theme.PANEL, (0.5 * n, 0.62 * n), 0.07 * n)
+    pygame.draw.line(s, theme.PANEL, (0.5 * n, 0.64 * n), (0.5 * n, 0.8 * n), _w(n, 0.06))
+
+
 def _sol(s: pygame.Surface, n: float) -> None:
     radial_disc(s, (0.5 * n, 0.5 * n), 0.34 * n, (255, 236, 190), (255, 150, 60), light=(0, 0))
     for i in range(8):
@@ -312,6 +324,7 @@ PAINTERS: dict[str, Callable[[pygame.Surface, float], None]] = {
     "rally": _rally,
     "move": _move,
     "sol": _sol,
+    "lock": _lock,
 }
 
 RESOURCE_COLORS: dict[str, Color] = {

@@ -1,4 +1,4 @@
-"""Сложность в интерфейсе (этап 2, S2-01): переключатель в меню, строка на паузе и на итогах. SDL dummy."""
+"""Сложность в интерфейсе (этап 2, S2-01): переключатель на выборе миссии (W3-01), строка на паузе и на итогах. SDL dummy."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import pytest  # noqa: E402
 
 from reddome.app import App  # noqa: E402
 from reddome.scenes.game import GameScene  # noqa: E402
-from reddome.scenes.menu import MenuScene  # noqa: E402
+from reddome.scenes.missions import MissionsScene  # noqa: E402
 from reddome.scenes.pause import PauseScene  # noqa: E402
 from reddome.scenes.result import ResultScene  # noqa: E402
 from reddome.sim.types import Outcome  # noqa: E402
@@ -50,8 +50,8 @@ def click(app: App, pos: tuple[int, int]) -> None:
 
 
 def test_menu_switch_cycles_difficulty(app: App) -> None:
-    menu = open_scene(app, "menu")
-    assert isinstance(menu, MenuScene)
+    menu = open_scene(app, "missions")
+    assert isinstance(menu, MissionsScene)
     assert "Обычный" in menu.difficulty_button.label
     click(app, menu.difficulty_button.rect.center)
     assert app.difficulty == "hard" and "Сложный" in menu.difficulty_button.label

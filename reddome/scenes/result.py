@@ -1,6 +1,6 @@
-"""Экран итогов (ФТ-12): результат, время, статистика партии крупными числами.
+"""Экран итогов (ФТ-12): результат, время, статистика партии крупными числами и очки (W3-10).
 
-TODO W3-10: очки по формуле из balance.score.
+Очки считает sim/score.py по весам из balance.score; здесь — итог и расшифровка по строкам.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import pygame
 
 from reddome.render.draw import glow
 from reddome.scenes.base import Scene
+from reddome.sim.score import Score, ScoreLine
 from reddome.sim.types import Outcome, SideStats
 from reddome.ui import theme
 from reddome.ui.commands import difficulty_line
@@ -22,11 +23,19 @@ REASONS = {
 }
 
 
+def score_part(line: ScoreLine) -> str:
+    """«Победа +1000», «Враги 7×20», «Погибшие колонисты 6×−200»."""
+    if line.key == "win":
+        return f"{line.label} +{line.weight}"
+    return f"{line.label} {line.count}×{line.weight}".replace("-", "−")
+
+
 class ResultScene(Scene):
     opaque = True
 
     def enter(self, outcome: Outcome, sol: int = 0, elapsed_ms: int = 0, stats: dict[str, SideStats] | None = None,
-              background: pygame.Surface | None = None, difficulty: str | None = None, **data: Any) -> None:
+              background: pygame.Surface | None = None, difficulty: str | None = None, score: Score | None = None,
+              **data: Any) -> None:
         self.background = background
         self.difficulty_text = difficulty_line(difficulty or self.app.difficulty)
         self.won = outcome.winner == "player"
@@ -42,8 +51,12 @@ class ResultScene(Scene):
             ("Уничтожено врагов", str(own.enemy_units_killed + own.enemy_buildings_destroyed)),
             ("Потеряно юнитов", str(own.units_lost)),
         ]
+        self.score = score
+        self.score_text = f"Очки: {score.total:,}".replace(",", " ") if score is not None else ""
+        #: Расшифровка — только ненулевые строки: «Победа +1000 · Население 6×50 …».
+        self.score_parts = [score_part(line) for line in (score.lines if score is not None else ()) if line.count]
         w, h = theme.SCREEN_SIZE
-        self.card_rect = pygame.Rect(0, 0, 720, 520)
+        self.card_rect = pygame.Rect(0, 0, 720, 600 if score is not None else 520)
         self.card_rect.center = (w // 2, h // 2)
         color = theme.SUCCESS if self.won else theme.ALARM
         self.halo = glow(160, color)
@@ -74,5 +87,11 @@ class ResultScene(Scene):
             pygame.draw.rect(surface, theme.PANEL_EDGE, tile, 1, border_radius=10)
             theme.draw_text(surface, value, (tile.centerx, tile.y + 44), 40, theme.SAND, anchor="center", kind="title")
             theme.draw_text(surface, label, (tile.centerx, tile.bottom - 20), 15, theme.TEXT_QUIET, anchor="center")
+        if self.score is not None:
+            y = r.y + 170 + 2 * 124 + 14
+            theme.draw_text(surface, self.score_text, (r.centerx, y + 18), 34, theme.WARNING, anchor="center",
+                            kind="title", shadow=True)
+            theme.draw_text(surface, " · ".join(self.score_parts), (r.centerx, y + 54), 15, theme.TEXT_QUIET,
+                            anchor="center")
         for button in self.buttons:
             button.draw(surface)
